@@ -1,0 +1,153 @@
+import socket
+import struct
+from enum import IntEnum
+from typing import List
+
+
+class MessageType(IntEnum):
+    JOIN = 0
+    LEAVE = 1
+    PING = 2
+    PONG = 3
+
+
+# join message has the following fields:
+# 1 byte for message type
+# 4 bytes for my ip address
+# 2 bytes for my port
+# 4 bytes for my timestamp
+JOIN_FORMAT = '!B4sHI'
+join_struct = struct.Struct(JOIN_FORMAT)
+
+# membership list message has the following fields
+# 4 bytes for the ip address
+# 2 bytes for the port
+# 4 bytes for the timestamp
+# this repeats for each machine in the membership list
+MEMBERSHIP_LIST_FORMAT = '!4sHI'
+membership_list_struct = struct.Struct(MEMBERSHIP_LIST_FORMAT)
+
+# communication message has the following fields
+# 1 byte for message type
+# 4 bytes for the ip address of the sender
+# 2 bytes for the port of the sender
+# 4 bytes for the timestamp of the sender
+COMMUNICATION_FORMAT = '!B4sHI'
+communication_struct = struct.Struct(COMMUNICATION_FORMAT)
+
+
+class Message:
+    def __init__(self, message_type: MessageType, ip: str, port: int, timestamp: int):
+        self.message_type: MessageType = message_type
+        self.ip: str = ip
+        self.port: int = port
+        self.timestamp: int = timestamp
+
+    def serialize(self):
+        # convert the ip address to bytes
+        ip_bytes = socket.inet_aton(self.ip)
+        return communication_struct.pack(self.message_type, ip_bytes, self.port, self.timestamp)
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        message_type, ip, port, timestamp = join_struct.unpack(data)
+        # convert the ip address to a string
+        ip = socket.inet_ntoa(ip)
+        return cls(message_type, ip, port, timestamp)
+
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"Message({msg_type}, ip={self.ip}, port={self.port}, timestamp={self.timestamp})"
+
+    def __eq__(self, other):
+        return self.message_type == other.message_type and self.ip == other.ip and self.port == other.port and self.timestamp == other.timestamp
+
+    def __hash__(self):
+        return hash((self.message_type, self.ip, self.port, self.timestamp))
+
+
+class Member:
+    def __init__(self, ip: str, port: int, timestamp: int):
+        self.ip: str = ip
+        self.port: int = port
+        self.timestamp: int = timestamp
+
+    def __str__(self):
+        return f"Member(ip={self.ip}, port={self.port}, timestamp={self.timestamp})"
+
+    def to_tuple(self):
+        return (self.ip, self.port, self.timestamp)
+
+    def serialize(self):
+        # convert the "ip:port:timestamp" to bytes
+        bytes_msg = f"{self.ip}:{self.port}:{self.timestamp}".encode()
+        return bytes_msg
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        # convert the bytes to a string
+        msg = data.decode()
+        ip, port, timestamp = msg.split(':')
+        return cls(ip, int(port), int(timestamp))
+
+    @classmethod
+    def from_tuple(cls, tup):
+        ip, port, timestamp = tup
+        try:
+            # verify that the ip is valid
+            socket.inet_aton(ip)
+        except socket.error:
+            raise ValueError(f'Invalid ip address: {ip}')
+        # repeat with port
+        try:
+            port = int(port)
+        except ValueError:
+            raise ValueError(f'Invalid port: {port}')
+        # repeat with timestamp
+        try:
+            timestamp = int(timestamp)
+        except ValueError:
+            raise ValueError(f'Invalid timestamp: {timestamp}')
+        return Member(ip, port, timestamp)
+
+
+class MembershipList:
+    def __init__(self, membership_list: List[Member]):
+        self.membership_list = membership_list
+
+
+    def add(self, member: Member):
+        self.membership_list.append(member)
+
+    def remove(self, member: Member):
+        self.membership_list.remove(member)
+
+    def __str__(self):
+        members = [str(member) for member in self.membership_list]
+        return f"MembershipList({', '.join(members)})"
+
+    def serialize(self):
+        # ip address and port and timestamp are separated by a colon
+        # different machines are separated by a comma
+        # the membership list is a string
+
+        bytes_str = b','.join([member.serialize() for member in self.membership_list])
+        return bytes_str
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        # convert the bytes to a string
+        membership_list_str = data.decode()
+        # split the string into a list of strings
+        membership_list_str_list = membership_list_str.split(',')
+        # split each string into a list of ip and port
+
+        membership_list = [tuple(m.split(':')) for m in membership_list_str_list]
+        # convert to member objects
+        membership_list = [Member.from_tuple(m) for m in membership_list]
+        # verify that the ip and port are valid
+
+
+        return cls(membership_list)
+
+
