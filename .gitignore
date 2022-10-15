@@ -1,0 +1,9 @@
+# pycache
+**/__pycache__/
+**/*.py[cod]
+
+# venv
+**/venv
+
+# pycharm specific files
+.idea/

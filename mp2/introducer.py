@@ -27,7 +27,7 @@ class IntroducerHandler(socketserver.BaseRequestHandler):
         self.server.add_to_membership_list(new_member)
 
         # send the membership list to the node
-        membership_list_msg = self.server.membership_list.serialize()
+        membership_list_msg = self.server.get_membership_list().serialize()
         # send the membership list to the node via the tcp socket
         sock.sendall(membership_list_msg)
 
@@ -35,18 +35,35 @@ class IntroducerHandler(socketserver.BaseRequestHandler):
         # create a PING message
         ping_msg = Message(MessageType.PING, received_join_message.ip, received_join_message.port, received_join_message.timestamp)
 
+        successful_join = False
         # make a udp socket to send the ping message
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
+            # set timeout to 1 second
+            udp_socket.settimeout(1)
             # send the ping message
             udp_socket.sendto(ping_msg.serialize(), (received_join_message.ip, received_join_message.port))
             # wait for a response
             try:
                 data, address = udp_socket.recvfrom(1024)
                 self.server.logger.info("Received ping response from {}".format(address))
+                successful_join = True
             except socket.timeout:
                 self.server.logger.error("No response from {}".format(address))
                 # remove the node from the membership list
                 self.server.remove_from_membership_list(received_join_message.ip, received_join_message.port)
+
+
+        if not successful_join:
+            return
+
+        # send a ping message to all the nodes in the membership list
+        # create a machine to represent the newly joined node
+        new_member_machine = Member(received_join_message.ip, received_join_message.port, received_join_message.timestamp)
+        # broadcast the ping message to all the nodes in the membership list
+        self.server.broadcast_join(new_member_machine)
+
+
+
 
 
 
@@ -61,11 +78,10 @@ class IntroducerServer(socketserver.TCPServer):
         self.host = host
         self.port = port
 
-        self.membership_list = MembershipList([])
+        # self.membership_list = MembershipList([])
 
         self.logger = logging.getLogger("IntroducerServer")
         self.logger.setLevel(logging.DEBUG)
-        self.logger.addHandler(logging.StreamHandler(sys.stdout))
 
 
         open_port = get_any_open_port()
@@ -94,21 +110,21 @@ class IntroducerServer(socketserver.TCPServer):
 
     def add_to_membership_list(self, member):
         self.logger.info(f"Adding {str(member)} to membership list")
-        self.membership_list.add(member)
-
+        self.node.membership_list.append(member)
         self.print_membership_list()
 
     def print_membership_list(self):
-        self.logger.info(f"Membership list:\n{self.membership_list}")
+        self.logger.info(f"Membership list:\n\t{self.node.membership_list}")
 
     def remove_from_membership_list(self, machine):
         self.logger.info(f"Removing {str(machine)} from membership list")
-        self.membership_list.remove(machine)
+        self.node.membership_list.remove(machine)
 
     def get_membership_list(self):
-        return self.membership_list
+        return self.node.membership_list
 
-
-
-
-
+    def broadcast_join(self, machine):
+        self.logger.info(f"Broadcasting join message to {str(machine)}")
+        # create a join message
+        join_msg = Message(MessageType.JOIN, machine.ip, machine.port, machine.timestamp)
+        self.node.process_join(join_msg)

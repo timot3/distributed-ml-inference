@@ -50,7 +50,7 @@ class Message:
 
     @classmethod
     def deserialize(cls, data: bytes):
-        message_type, ip, port, timestamp = join_struct.unpack(data)
+        message_type, ip, port, timestamp = communication_struct.unpack(data)
         # convert the ip address to a string
         ip = socket.inet_ntoa(ip)
         return cls(message_type, ip, port, timestamp)
@@ -67,16 +67,21 @@ class Message:
 
 
 class Member:
-    def __init__(self, ip: str, port: int, timestamp: int):
+    def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = None):
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
+
+        if last_heartbeat is None:
+            self.last_heartbeat = timestamp
+        else:
+            self.last_heartbeat = last_heartbeat
 
     def __str__(self):
         return f"Member(ip={self.ip}, port={self.port}, timestamp={self.timestamp})"
 
     def to_tuple(self):
-        return (self.ip, self.port, self.timestamp)
+        return self.ip, self.port, self.timestamp
 
     def serialize(self):
         # convert the "ip:port:timestamp" to bytes
@@ -88,7 +93,8 @@ class Member:
         # convert the bytes to a string
         msg = data.decode()
         ip, port, timestamp = msg.split(':')
-        return cls(ip, int(port), int(timestamp))
+        last_heartbeat = timestamp
+        return cls(ip, int(port), int(timestamp), last_heartbeat=int(last_heartbeat))
 
     @classmethod
     def from_tuple(cls, tup):
@@ -110,20 +116,17 @@ class Member:
             raise ValueError(f'Invalid timestamp: {timestamp}')
         return Member(ip, port, timestamp)
 
-
-class MembershipList:
-    def __init__(self, membership_list: List[Member]):
-        self.membership_list = membership_list
+    def __eq__(self, other):
+        return self.ip == other.ip and self.port == other.port and self.timestamp == other.timestamp
 
 
-    def add(self, member: Member):
-        self.membership_list.append(member)
-
-    def remove(self, member: Member):
-        self.membership_list.remove(member)
+class MembershipList(list):
+    # def __init__(self, membership_list: List[Member]):
+    #     super().__init__()
+    #     self.list = membership_list
 
     def __str__(self):
-        members = [str(member) for member in self.membership_list]
+        members = [str(member) for member in self]
         return f"MembershipList({', '.join(members)})"
 
     def serialize(self):
@@ -131,7 +134,7 @@ class MembershipList:
         # different machines are separated by a comma
         # the membership list is a string
 
-        bytes_str = b','.join([member.serialize() for member in self.membership_list])
+        bytes_str = b','.join([member.serialize() for member in self])
         return bytes_str
 
     @classmethod
@@ -147,7 +150,4 @@ class MembershipList:
         membership_list = [Member.from_tuple(m) for m in membership_list]
         # verify that the ip and port are valid
 
-
         return cls(membership_list)
-
-
