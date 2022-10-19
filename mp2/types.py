@@ -1,8 +1,8 @@
 import socket
 import struct
 from enum import IntEnum
-from typing import List
-
+from typing import List, Any, Optional
+import logging
 
 class MessageType(IntEnum):
     JOIN = 0
@@ -119,11 +119,33 @@ class Member:
     def __eq__(self, other):
         return self.ip == other.ip and self.port == other.port and self.timestamp == other.timestamp
 
+    def is_same_machine_as(self, other) -> bool:
+        return self.ip == other.ip and self.port == other.port
+
 
 class MembershipList(list):
     # def __init__(self, membership_list: List[Member]):
     #     super().__init__()
     #     self.list = membership_list
+
+    def update_heartbeat(self, member, new_timestamp) -> bool:
+        # find the member in the list
+        for m in self:
+            if m.ip == member.ip and m.port == member.port:
+                # update the timestamp
+                m.last_heartbeat = new_timestamp
+                return True
+
+        logging.getLogger(__name__).warning(f"Could not find {member} in membership list")
+        return False
+
+    def get_machine(self, member) -> Optional[Member]:
+        for m in self:
+            if m.is_same_machine_as(member):
+                return m
+
+        return None
+
 
     def __str__(self):
         members = [str(member) for member in self]
@@ -146,6 +168,8 @@ class MembershipList(list):
         # split each string into a list of ip and port
 
         membership_list = [tuple(m.split(':')) for m in membership_list_str_list]
+
+        print(membership_list)
         # convert to member objects
         membership_list = [Member.from_tuple(m) for m in membership_list]
         # verify that the ip and port are valid
