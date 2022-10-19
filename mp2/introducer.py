@@ -22,12 +22,18 @@ class IntroducerHandler(socketserver.BaseRequestHandler):
         self.server.logger.info(str(received_join_message))
 
         # add the node to the membership list
-        new_member = Member(received_join_message.ip, received_join_message.port, received_join_message.timestamp)
-
+        new_member = Member(
+            received_join_message.ip,
+            received_join_message.port,
+            received_join_message.timestamp,
+        )
 
         # send the membership list to the node
-        new_member_machine = Member(received_join_message.ip, received_join_message.port,
-                                    received_join_message.timestamp)
+        new_member_machine = Member(
+            received_join_message.ip,
+            received_join_message.port,
+            received_join_message.timestamp,
+        )
         new_membership_list = self.server.get_membership_list() + [new_member_machine]
         new_membership_list = MembershipList(new_membership_list)
 
@@ -121,10 +127,11 @@ class IntroducerServer(socketserver.TCPServer):
     def broadcast_join(self, machine):
         self.logger.info(f"Sending membership list message to {str(machine)}")
         # create a join message
-        join_msg = Message(MessageType.JOIN, machine.ip, machine.port, machine.timestamp)
+        join_msg = Message(
+            MessageType.JOIN, machine.ip, machine.port, machine.timestamp
+        )
 
         # send the join message to self's node server
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
             udp_socket.sendto(join_msg.serialize(), (self.node.host, self.node.port))
         # self.node.process_join(join_msg, machine)
-

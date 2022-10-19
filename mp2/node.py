@@ -10,10 +10,20 @@ from .utils import get_self_ip_and_port
 
 # the handler class is responsible for handling the request
 class NodeHandler(socketserver.DatagramRequestHandler):
-
     def _send_ack(self):
-        ack_message = Message(MessageType.PONG, self.server.host, self.server.port, self.server.timestamp)
+        ack_message = Message(
+            MessageType.PONG, self.server.host, self.server.port, self.server.timestamp
+        )
         self.socket.sendto(ack_message.serialize(), self.client_address)
+
+    def _process_ack(self, message):
+        ack_machine = Member(message.ip, message.port, message.timestamp)
+        if self.server.membership_list.update_heartbeat(ack_machine):
+            self.server.logger.info("Updated heartbeat of {}".format(ack_machine))
+        else:
+            self.server.logger.info(
+                "Machine {} not found in membership list".format(ack_machine)
+            )
 
     def _broadcast_to_neighbors(self, message):
         neighbors = MembershipList(self.server.get_neighbors())
@@ -35,24 +45,33 @@ class NodeHandler(socketserver.DatagramRequestHandler):
             # self.server.process_join(message, sender)
             new_member = Member(message.ip, message.port, message.timestamp)
             if self.server.membership_list.has_machine(new_member):
-                self.server.logger.info("Machine {} already exists in the membership list".format(new_member))
+                self.server.logger.info(
+                    "Machine {} already exists in the membership list".format(
+                        new_member
+                    )
+                )
                 return
-
             self._broadcast_to_neighbors(message)
+            # add the member after broadcasting
+            # in order to not include the member in neighbors
             self.server.add_new_member(new_member)
+
         elif message.message_type == MessageType.PING:
-            # self.server.process_ping(message, sender)
             self.server.logger.info("Sending ACK to {}".format(self.client_address))
             self._send_ack()
+
         elif message.message_type == MessageType.PONG:
             self.server.logger.info("Received ACK from {}".format(self.client_address))
-            raise NotImplementedError
+            self._process_ack(message)
+
         elif message.message_type == MessageType.LEAVE:
-            self.server.logger.info("Received LEAVE from {}".format(self.client_address))
+            self.server.logger.info(
+                "Received LEAVE from {}".format(self.client_address)
+            )
             raise NotImplementedError
 
         else:
-            raise ValueError("Unknown message type: {}".format(message.message_type))
+            raise ValueError("Unknown message type! Received Message: ".format(message))
 
     def handle(self):
         self.server.logger.info("Handling request from {}".format(self.client_address))
@@ -88,7 +107,9 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 # Its server bind method is called when the server is created
 # and connects to the introducer server via a tcp scket
 class NodeUDPServer(socketserver.UDPServer):
-    def __init__(self, host, port, introducer_host, introducer_port, is_introducer=False):
+    def __init__(
+        self, host, port, introducer_host, introducer_port, is_introducer=False
+    ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
         self.host = host

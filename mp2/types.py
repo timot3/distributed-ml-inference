@@ -4,6 +4,7 @@ from enum import IntEnum
 from typing import List, Any, Optional
 import logging
 
+
 class MessageType(IntEnum):
     JOIN = 0
     LEAVE = 1
@@ -16,7 +17,7 @@ class MessageType(IntEnum):
 # 4 bytes for my ip address
 # 2 bytes for my port
 # 4 bytes for my timestamp
-JOIN_FORMAT = '!B4sHI'
+JOIN_FORMAT = "!B4sHI"
 join_struct = struct.Struct(JOIN_FORMAT)
 
 # membership list message has the following fields
@@ -24,7 +25,7 @@ join_struct = struct.Struct(JOIN_FORMAT)
 # 2 bytes for the port
 # 4 bytes for the timestamp
 # this repeats for each machine in the membership list
-MEMBERSHIP_LIST_FORMAT = '!4sHI'
+MEMBERSHIP_LIST_FORMAT = "!4sHI"
 membership_list_struct = struct.Struct(MEMBERSHIP_LIST_FORMAT)
 
 # communication message has the following fields
@@ -32,7 +33,7 @@ membership_list_struct = struct.Struct(MEMBERSHIP_LIST_FORMAT)
 # 4 bytes for the ip address of the sender
 # 2 bytes for the port of the sender
 # 4 bytes for the timestamp of the sender
-COMMUNICATION_FORMAT = '!B4sHI'
+COMMUNICATION_FORMAT = "!B4sHI"
 communication_struct = struct.Struct(COMMUNICATION_FORMAT)
 
 
@@ -46,7 +47,9 @@ class Message:
     def serialize(self):
         # convert the ip address to bytes
         ip_bytes = socket.inet_aton(self.ip)
-        return communication_struct.pack(self.message_type, ip_bytes, self.port, self.timestamp)
+        return communication_struct.pack(
+            self.message_type, ip_bytes, self.port, self.timestamp
+        )
 
     @classmethod
     def deserialize(cls, data: bytes):
@@ -60,7 +63,12 @@ class Message:
         return f"Message({msg_type}, ip={self.ip}, port={self.port}, timestamp={self.timestamp})"
 
     def __eq__(self, other):
-        return self.message_type == other.message_type and self.ip == other.ip and self.port == other.port and self.timestamp == other.timestamp
+        return (
+            self.message_type == other.message_type
+            and self.ip == other.ip
+            and self.port == other.port
+            and self.timestamp == other.timestamp
+        )
 
     def __hash__(self):
         return hash((self.message_type, self.ip, self.port, self.timestamp))
@@ -92,7 +100,7 @@ class Member:
     def deserialize(cls, data: bytes):
         # convert the bytes to a string
         msg = data.decode()
-        ip, port, timestamp = msg.split(':')
+        ip, port, timestamp = msg.split(":")
         last_heartbeat = timestamp
         return cls(ip, int(port), int(timestamp), last_heartbeat=int(last_heartbeat))
 
@@ -103,21 +111,25 @@ class Member:
             # verify that the ip is valid
             socket.inet_aton(ip)
         except socket.error:
-            raise ValueError(f'Invalid ip address: {ip}')
+            raise ValueError(f"Invalid ip address: {ip}")
         # repeat with port
         try:
             port = int(port)
         except ValueError:
-            raise ValueError(f'Invalid port: {port}')
+            raise ValueError(f"Invalid port: {port}")
         # repeat with timestamp
         try:
             timestamp = int(timestamp)
         except ValueError:
-            raise ValueError(f'Invalid timestamp: {timestamp}')
+            raise ValueError(f"Invalid timestamp: {timestamp}")
         return Member(ip, port, timestamp)
 
     def __eq__(self, other):
-        return self.ip == other.ip and self.port == other.port and self.timestamp == other.timestamp
+        return (
+            self.ip == other.ip
+            and self.port == other.port
+            and self.timestamp == other.timestamp
+        )
 
     def is_same_machine_as(self, other) -> bool:
         return self.ip == other.ip and self.port == other.port
@@ -142,7 +154,9 @@ class MembershipList(list):
                 m.last_heartbeat = new_timestamp
                 return True
 
-        logging.getLogger(__name__).warning(f"Could not find {member} in membership list")
+        logging.getLogger(__name__).warning(
+            f"Could not find {member} in membership list"
+        )
         return False
 
     def get_machine(self, member) -> Optional[Member]:
@@ -151,7 +165,6 @@ class MembershipList(list):
                 return m
 
         return None
-
 
     def __str__(self):
         members = [str(member) for member in self]
@@ -162,7 +175,7 @@ class MembershipList(list):
         # different machines are separated by a comma
         # the membership list is a string
 
-        bytes_str = b','.join([member.serialize() for member in self])
+        bytes_str = b",".join([member.serialize() for member in self])
         return bytes_str
 
     @classmethod
@@ -170,10 +183,10 @@ class MembershipList(list):
         # convert the bytes to a string
         membership_list_str = data.decode()
         # split the string into a list of strings
-        membership_list_str_list = membership_list_str.split(',')
+        membership_list_str_list = membership_list_str.split(",")
         # split each string into a list of ip and port
 
-        membership_list = [tuple(m.split(':')) for m in membership_list_str_list]
+        membership_list = [tuple(m.split(":")) for m in membership_list_str_list]
         # convert to member objects
         membership_list = [Member.from_tuple(m) for m in membership_list]
         # verify that the ip and port are valid

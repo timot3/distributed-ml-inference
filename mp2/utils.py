@@ -19,7 +19,7 @@ def get_any_open_port() -> int:
     :return: a random open port
     """
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-        sock.bind(('', 0))
+        sock.bind(("", 0))
         port = sock.getsockname()[1]
 
     return port
