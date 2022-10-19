@@ -128,6 +128,12 @@ class MembershipList(list):
     #     super().__init__()
     #     self.list = membership_list
 
+    def has_machine(self, member: Member) -> bool:
+        for m in self:
+            if m.is_same_machine_as(member):
+                return True
+        return False
+
     def update_heartbeat(self, member, new_timestamp) -> bool:
         # find the member in the list
         for m in self:
@@ -168,8 +174,6 @@ class MembershipList(list):
         # split each string into a list of ip and port
 
         membership_list = [tuple(m.split(':')) for m in membership_list_str_list]
-
-        print(membership_list)
         # convert to member objects
         membership_list = [Member.from_tuple(m) for m in membership_list]
         # verify that the ip and port are valid

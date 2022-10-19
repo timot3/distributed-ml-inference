@@ -21,11 +21,7 @@ if __name__ == "__main__":
     # create a udp server that resuses the address
     with NodeUDPServer(HOST, PORT, INTRODUCER_HOST, INTRODUCER_PORT, is_introducer=False) as server:
         server.allow_reuse_address = True
-        print("binding")
         server.server_bind()
-        print("activating")
         server.server_activate()
-        print("joining")
         server.join_network()
-        print("serving")
         server.serve_forever()

@@ -28,9 +28,10 @@ class IntroducerHandler(socketserver.BaseRequestHandler):
         # send the membership list to the node
         new_member_machine = Member(received_join_message.ip, received_join_message.port,
                                     received_join_message.timestamp)
-        self.server.add_to_membership_list(new_member_machine)
+        new_membership_list = self.server.get_membership_list() + [new_member_machine]
+        new_membership_list = MembershipList(new_membership_list)
 
-        membership_list_msg = self.server.get_membership_list().serialize()
+        membership_list_msg = new_membership_list.serialize()
         # send the membership list to the node via the tcp socket
         sock.sendall(membership_list_msg)
 
