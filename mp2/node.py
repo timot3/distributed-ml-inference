@@ -25,14 +25,6 @@ class NodeHandler(socketserver.DatagramRequestHandler):
                 "Machine {} not found in membership list".format(ack_machine)
             )
 
-    def _broadcast_to_neighbors(self, message):
-        neighbors = MembershipList(self.server.get_neighbors())
-        for neighbor in neighbors:
-            if neighbor == self.server.member:
-                continue
-            self.server.logger.info("Sending {} to {}".format(message, neighbor))
-            self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
-
     def _process_message(self, message, sender=None) -> None:
         """
         Process the message and take the appropriate action
@@ -51,7 +43,7 @@ class NodeHandler(socketserver.DatagramRequestHandler):
                     )
                 )
                 return
-            self._broadcast_to_neighbors(message)
+            self.server.broadcast_to_neighbors(message)
             # add the member after broadcasting
             # in order to not include the member in neighbors
             self.server.add_new_member(new_member)
@@ -68,13 +60,20 @@ class NodeHandler(socketserver.DatagramRequestHandler):
             self.server.logger.info(
                 "Received LEAVE from {}".format(self.client_address)
             )
-            raise NotImplementedError
+            leaving_member = Member(message.ip, message.port, message.timestamp)
+            if leaving_member not in self.server.membership_list:
+                self.server.logger.info(
+                    "Machine {} not found in membership list".format(leaving_member)
+                )
+                return
+            self.server.membership_list.remove(leaving_member)
+            self.server.broadcast_to_neighbors(message)
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
 
     def handle(self):
-        self.server.logger.info("Handling request from {}".format(self.client_address))
+        self.server.logger.debug("Handling request from {}".format(self.client_address))
         # data, sock = self.request
         data = self.request[0]
         data = data.strip()
@@ -108,7 +107,7 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 # and connects to the introducer server via a tcp scket
 class NodeUDPServer(socketserver.UDPServer):
     def __init__(
-        self, host, port, introducer_host, introducer_port, is_introducer=False
+            self, host, port, introducer_host, introducer_port, is_introducer=False
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
@@ -128,7 +127,8 @@ class NodeUDPServer(socketserver.UDPServer):
         self.logger.setLevel(logging.DEBUG)
 
         # create a tcp socket to connect to the introducer
-        self.introducer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # it will be initialized when the node joins the network
+        self.introducer_socket = None
 
         self.membership_list = MembershipList([])
 
@@ -148,6 +148,11 @@ class NodeUDPServer(socketserver.UDPServer):
         and processing the received membership list.
         :return:
         """
+
+        if self.introducer_socket is not None:
+            self.logger.info("Already connected to the introducer")
+            return False
+        self.introducer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # send a message to the introducer to register this node
 
         # find the ip of this machine
@@ -186,7 +191,19 @@ class NodeUDPServer(socketserver.UDPServer):
         Leave the network by broadcasting a LEAVE message to all neighbors
         :return: True if the node left the network successfully
         """
-        raise NotImplementedError
+        # send leave message to all neighbors
+        self.logger.info("Sending LEAVE message to neighbors")
+
+        # clear the membership list
+        # broadcast the leave message
+        leave_message = Message(MessageType.LEAVE, self.member.ip, self.member.port, self.member.timestamp)
+        self.broadcast_to_neighbors(leave_message)
+        self.membership_list = MembershipList([])
+
+        # disconnect the introducer socket
+        self.introducer_socket.close()
+        self.introducer_socket = None
+        return True
 
     def server_bind(self) -> None:
         # call the super class server_bind method
@@ -197,10 +214,13 @@ class NodeUDPServer(socketserver.UDPServer):
         raise NotImplementedError()
         pass
 
-    def send_to_neighbors(self, message) -> None:
-        # send the message to all neighbors
-        raise NotImplementedError()
-        pass
+    def broadcast_to_neighbors(self, message):
+        neighbors = MembershipList(self.get_neighbors())
+        for neighbor in neighbors:
+            if neighbor == self.member:
+                continue
+            self.logger.info("Sending {} to {}".format(message, neighbor))
+            self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
 
     def get_neighbors(self) -> List[Member]:
         # return a list of neighbors
@@ -236,14 +256,19 @@ class NodeUDPServer(socketserver.UDPServer):
             self.membership_list.append(member)
 
     def print_membership_list(self):
-        self.logger.info(self.membership_list)
+        self.logger.debug(self.membership_list)
 
     def get_self_id(self):
         """
         Get the id of this node
         :return: The location of this node in the membership list
         """
-        return self.membership_list.index(self.member)
+        idx = -1
+        try:
+            idx = self.membership_list.index(self.member)
+        except ValueError:
+            self.logger.error("I am not in membership list!")
+        return idx
 
     def process_leave(self, message, sender) -> None:
         # remove the node from the membership list
