@@ -1,5 +1,9 @@
+import threading
+
 from mp2.introducer import IntroducerServer
 import logging
+
+from mp2.utils import run_node_command_menu
 
 if __name__ == "__main__":
     # set logging config
@@ -22,4 +26,6 @@ if __name__ == "__main__":
         server.server_bind()
         server.server_activate()
         server.start_node_server_thread()
-        server.serve_forever()
+        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
+        server_thread.start()
+        run_node_command_menu(server.node)

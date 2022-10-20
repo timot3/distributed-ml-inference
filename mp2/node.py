@@ -157,12 +157,21 @@ class NodeUDPServer(socketserver.UDPServer):
         self.member = Member(ip, port, self.timestamp)
 
         if self.is_introducer:
+            if self.membership_list.has_machine(self.member):
+                self.logger.error("Node already exists in membership list")
+                return False
+
             self.membership_list = MembershipList([self.member])
             self.logger.info("Added self to membership list")
             return True
 
         join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
-        self.introducer_socket.connect((self.introducer_host, self.introducer_port))
+        try:
+            self.introducer_socket.connect((self.introducer_host, self.introducer_port))
+        except OSError:
+            self.logger.error("Already connected to introducer")
+            return False
+
         self.introducer_socket.sendall(join_message.serialize())
         # get the response from the introducer
         response = self.introducer_socket.recv(1024)
@@ -171,6 +180,13 @@ class NodeUDPServer(socketserver.UDPServer):
         self.logger.info("Received membership list: {}".format(membership_list))
         self.membership_list = membership_list
         return True
+
+    def leave_network(self) -> bool:
+        """
+        Leave the network by broadcasting a LEAVE message to all neighbors
+        :return: True if the node left the network successfully
+        """
+        raise NotImplementedError
 
     def server_bind(self) -> None:
         # call the super class server_bind method
@@ -218,6 +234,16 @@ class NodeUDPServer(socketserver.UDPServer):
         # otherwise, update the timestamp of the member
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
+
+    def print_membership_list(self):
+        self.logger.info(self.membership_list)
+
+    def get_self_id(self):
+        """
+        Get the id of this node
+        :return: The location of this node in the membership list
+        """
+        return self.membership_list.index(self.member)
 
     def process_leave(self, message, sender) -> None:
         # remove the node from the membership list
