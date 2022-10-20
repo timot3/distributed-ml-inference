@@ -2,6 +2,8 @@ import socket
 import struct
 import textwrap
 
+from mp2.types import bcolors
+
 
 def get_self_ip_and_port(sock) -> (str, int):
     """
@@ -41,9 +43,10 @@ def _get_command_option() -> int:
 
 def _handle_command(node, command):
     if command == 1:
-        node.print_membership_list()
+        membership_list = node.get_membership_list()
+        print(bcolors.OKBLUE + str(membership_list) + bcolors.ENDC)
     elif command == 2:
-        print(node.get_self_id())
+        print(bcolors.OKBLUE + "NODE ID: " + str(node.get_self_id()) + bcolors.ENDC)
     elif command == 3:
         node.join_network()
     elif command == 4:

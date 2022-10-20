@@ -1,10 +1,11 @@
 import logging
 import socketserver
 import socket
+import threading
 import time
 from typing import List
 
-from .types import MessageType, Message, MembershipList, Member
+from .types import MessageType, Message, MembershipList, Member, HEARTBEAT_WATCHDOG_TIMEOUT, bcolors
 from .utils import get_self_ip_and_port
 
 
@@ -18,10 +19,11 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 
     def _process_ack(self, message):
         ack_machine = Member(message.ip, message.port, message.timestamp)
-        if self.server.membership_list.update_heartbeat(ack_machine):
-            self.server.logger.info("Updated heartbeat of {}".format(ack_machine))
+        now = int(time.time())
+        if self.server.membership_list.update_heartbeat(ack_machine, now):
+            self.server.logger.debug("Updated heartbeat of {}".format(ack_machine))
         else:
-            self.server.logger.info(
+            self.server.logger.warning(
                 "Machine {} not found in membership list".format(ack_machine)
             )
 
@@ -37,7 +39,7 @@ class NodeHandler(socketserver.DatagramRequestHandler):
             # self.server.process_join(message, sender)
             new_member = Member(message.ip, message.port, message.timestamp)
             if self.server.membership_list.has_machine(new_member):
-                self.server.logger.info(
+                self.server.logger.debug(
                     "Machine {} already exists in the membership list".format(
                         new_member
                     )
@@ -128,7 +130,7 @@ class NodeUDPServer(socketserver.UDPServer):
         self.member: Member = None
 
         self.logger = logging.getLogger("NodeServer")
-        self.logger.setLevel(logging.DEBUG)
+        self.logger.setLevel(logging.INFO)
 
         # create a tcp socket to connect to the introducer
         # it will be initialized when the node joins the network
@@ -200,6 +202,46 @@ class NodeUDPServer(socketserver.UDPServer):
         self.introducer_socket = None
         return True
 
+    def _heartbeat_watchdog(self):
+        """
+        This method periodically checks to see if any members have failed
+        It does this by sending pings to neighbors
+        If a neighbor does not respond to a ping, it is removed from the membership list
+        And a LEAVE message is broadcast to all neighbors
+        :return:
+        """
+        while True:
+            # send a ping to all neighbors
+            self.logger.debug("Sending Heartbeat PING to neighbors")
+            ping_message = Message(MessageType.PING, self.member.ip, self.member.port, self.member.timestamp)
+            self.broadcast_to_neighbors(ping_message)
+            # sleep for HEARTBEAT_WATCHDOG_TIMEOUT seconds
+            time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
+            # check if any neighbors have failed
+            # if they have, remove them from the membership list
+            # and broadcast a LEAVE message to all neighbors
+            failed_members = []
+            neighbors = self.get_neighbors()
+            for member in neighbors:
+                if member.last_heartbeat < int(time.time()) - HEARTBEAT_WATCHDOG_TIMEOUT:
+                    self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
+                    failed_members.append(member)
+            for member in failed_members:
+                # self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
+                self.membership_list.remove(member)
+                leave_message = Message(MessageType.LEAVE, member.ip, member.port, member.timestamp)
+                self.broadcast_to_neighbors(leave_message)
+
+    def start_heartbeat_watchdog(self):
+        """
+        This method starts the heartbeat watchdog thread
+        :return: the thread object
+        """
+        self.logger.debug("Starting heartbeat watchdog")
+        thread = threading.Thread(target=self._heartbeat_watchdog, daemon=True)
+        thread.start()
+        return thread
+
     def server_bind(self) -> None:
         # call the super class server_bind method
         super().server_bind()
@@ -224,21 +266,13 @@ class NodeUDPServer(socketserver.UDPServer):
         # if self is the first node, return the last two nodes
         # if self is the second node, return the last node and the first node
         # if there are less than three nodes, return the nodes that are not self
-        if len(self.membership_list) == 0:
+        if len(self.membership_list) < 2:
             return []  # no neighbors?? (meme here)
 
+        if len(self.membership_list) <= 3:
+            return [member for member in self.membership_list if not member.is_same_machine_as(self.member)]
+
         idx = self.membership_list.index(self.member)
-        # find the index of the member in the membership list
-
-        if len(self.membership_list) == 1:
-            return []
-        elif len(self.membership_list) == 2:
-            # return the other node
-            return [self.membership_list[1 - idx]]
-        elif len(self.membership_list) == 3:
-            # return the other two nodes
-            return [self.membership_list[1 - idx], self.membership_list[2 - idx]]
-
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
@@ -250,8 +284,12 @@ class NodeUDPServer(socketserver.UDPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def print_membership_list(self):
-        self.logger.debug(self.membership_list)
+    def get_membership_list(self):
+        """
+        Get the membership list
+        :return: membership_list as a MembershipList object
+        """
+        return self.membership_list
 
     def get_self_id(self):
         """
