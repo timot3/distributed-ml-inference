@@ -5,7 +5,14 @@ import threading
 import time
 from typing import List
 
-from .types import MessageType, Message, MembershipList, Member, HEARTBEAT_WATCHDOG_TIMEOUT, bcolors
+from .types import (
+    MessageType,
+    Message,
+    MembershipList,
+    Member,
+    HEARTBEAT_WATCHDOG_TIMEOUT,
+    bcolors,
+)
 from .utils import get_self_ip_and_port
 
 
@@ -112,7 +119,13 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 # and connects to the introducer server via a tcp scket
 class NodeUDPServer(socketserver.UDPServer):
     def __init__(
-            self, host, port, introducer_host, introducer_port, is_introducer=False, slow_mode=False
+        self,
+        host,
+        port,
+        introducer_host,
+        introducer_port,
+        is_introducer=False,
+        slow_mode=False,
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
@@ -193,7 +206,9 @@ class NodeUDPServer(socketserver.UDPServer):
 
         # clear the membership list
         # broadcast the leave message
-        leave_message = Message(MessageType.LEAVE, self.member.ip, self.member.port, self.member.timestamp)
+        leave_message = Message(
+            MessageType.LEAVE, self.member.ip, self.member.port, self.member.timestamp
+        )
         self.broadcast_to_neighbors(leave_message)
         self.membership_list = MembershipList([])
 
@@ -213,7 +228,12 @@ class NodeUDPServer(socketserver.UDPServer):
         while True:
             # send a ping to all neighbors
             self.logger.debug("Sending Heartbeat PING to neighbors")
-            ping_message = Message(MessageType.PING, self.member.ip, self.member.port, self.member.timestamp)
+            ping_message = Message(
+                MessageType.PING,
+                self.member.ip,
+                self.member.port,
+                self.member.timestamp,
+            )
             self.broadcast_to_neighbors(ping_message)
             # sleep for HEARTBEAT_WATCHDOG_TIMEOUT seconds
             time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
@@ -223,13 +243,22 @@ class NodeUDPServer(socketserver.UDPServer):
             failed_members = []
             neighbors = self.get_neighbors()
             for member in neighbors:
-                if member.last_heartbeat < int(time.time()) - HEARTBEAT_WATCHDOG_TIMEOUT:
-                    self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
+                if (
+                    member.last_heartbeat
+                    < int(time.time()) - HEARTBEAT_WATCHDOG_TIMEOUT
+                ):
+                    self.logger.warning(
+                        "Member {} has timed out ping/ack. Marking failed!".format(
+                            member
+                        )
+                    )
                     failed_members.append(member)
             for member in failed_members:
                 # self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
                 self.membership_list.remove(member)
-                leave_message = Message(MessageType.LEAVE, member.ip, member.port, member.timestamp)
+                leave_message = Message(
+                    MessageType.LEAVE, member.ip, member.port, member.timestamp
+                )
                 self.broadcast_to_neighbors(leave_message)
 
     def start_heartbeat_watchdog(self):
@@ -270,7 +299,11 @@ class NodeUDPServer(socketserver.UDPServer):
             return []  # no neighbors?? (meme here)
 
         if len(self.membership_list) <= 3:
-            return [member for member in self.membership_list if not member.is_same_machine_as(self.member)]
+            return [
+                member
+                for member in self.membership_list
+                if not member.is_same_machine_as(self.member)
+            ]
 
         idx = self.membership_list.index(self.member)
         # return the two nodes before self
