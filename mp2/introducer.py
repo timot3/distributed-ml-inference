@@ -21,13 +21,6 @@ class IntroducerHandler(socketserver.BaseRequestHandler):
         received_join_message = Message.deserialize(data)
         self.server.logger.info(str(received_join_message))
 
-        # add the node to the membership list
-        new_member = Member(
-            received_join_message.ip,
-            received_join_message.port,
-            received_join_message.timestamp,
-        )
-
         # send the membership list to the node
         new_member_machine = Member(
             received_join_message.ip,
@@ -88,7 +81,7 @@ class IntroducerServer(socketserver.TCPServer):
 
         open_port = get_any_open_port()
 
-        self.node = NodeUDPServer(host, open_port, host, port, is_introducer=True)
+        self.node = NodeUDPServer(host, open_port, host, port)
 
     def _start_node_server(self):
         with self.node:

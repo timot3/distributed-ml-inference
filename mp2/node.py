@@ -79,9 +79,12 @@ class NodeHandler(socketserver.DatagramRequestHandler):
         data = data.strip()
         sock = self.request[1]
 
-        time.sleep(1)
         if len(data) == 0:
             return
+
+        if self.server.slow_mode:
+            time.sleep(1)
+
         # get the machine that sent the message
         ip_of_sender = self.client_address[0]
         port_of_sender = self.client_address[1]
@@ -107,7 +110,7 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 # and connects to the introducer server via a tcp scket
 class NodeUDPServer(socketserver.UDPServer):
     def __init__(
-            self, host, port, introducer_host, introducer_port, is_introducer=False
+            self, host, port, introducer_host, introducer_port, is_introducer=False, slow_mode=False
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
@@ -115,6 +118,7 @@ class NodeUDPServer(socketserver.UDPServer):
         self.port = port
 
         self.is_introducer = is_introducer
+        self.slow_mode = slow_mode
 
         self.introducer_host = introducer_host
         self.introducer_port = introducer_port
@@ -160,15 +164,6 @@ class NodeUDPServer(socketserver.UDPServer):
         ip, port = get_self_ip_and_port(self.socket)
         self.timestamp = int(time.time())
         self.member = Member(ip, port, self.timestamp)
-
-        if self.is_introducer:
-            if self.membership_list.has_machine(self.member):
-                self.logger.error("Node already exists in membership list")
-                return False
-
-            self.membership_list = MembershipList([self.member])
-            self.logger.info("Added self to membership list")
-            return True
 
         join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
         try:

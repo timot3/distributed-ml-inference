@@ -13,7 +13,7 @@ if __name__ == "__main__":
             logging.StreamHandler()
         ]
     )
-    formatter = logging.Formatter("%(name)s:[%(levelname)s] %(message)s")
+    formatter = logging.Formatter("%(name)s:[%(levelname)-8s] %(message)s")
 
     for handler in logging.root.handlers:
         handler.setFormatter(formatter)
