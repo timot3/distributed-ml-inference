@@ -1,18 +1,15 @@
 import threading
 
-from mp2.introducer import IntroducerServer
+from Node.introducer import IntroducerServer
 import logging
 
-from mp2.utils import run_node_command_menu
+from Node.utils import run_node_command_menu
 
 if __name__ == "__main__":
     # set logging config
     logging.basicConfig(
         level=logging.INFO,
-        handlers=[
-            logging.FileHandler("debug.log"),
-            logging.StreamHandler()
-        ]
+        handlers=[logging.FileHandler("debug.log"), logging.StreamHandler()],
     )
 
     formatter = logging.Formatter("%(name)s:[%(levelname)-8s] %(message)s")

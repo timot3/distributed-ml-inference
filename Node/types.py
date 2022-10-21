@@ -13,6 +13,7 @@ class MessageType(IntEnum):
     LEAVE = 1
     PING = 2
     PONG = 3
+    DISCONNECTED = 4  # sent to node that is disconnected
 
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal

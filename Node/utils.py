@@ -2,7 +2,7 @@ import socket
 import struct
 import textwrap
 
-from mp2.types import bcolors
+from Node.types import bcolors
 
 
 def get_self_ip_and_port(sock) -> (str, int):
@@ -38,7 +38,13 @@ def _get_command_option() -> int:
     # unindent the commands using textwrap
     commands = textwrap.dedent(commands)
 
-    return int(input(commands))
+    command = input(commands)
+    try:
+        command = int(command)
+    except ValueError:
+        command = -1
+
+    return command
 
 
 def _handle_command(node, command):

@@ -78,6 +78,13 @@ class NodeHandler(socketserver.DatagramRequestHandler):
             self.server.membership_list.remove(leaving_member)
             self.server.broadcast_to_neighbors(message)
 
+        elif message.message_type == MessageType.DISCONNECTED:
+            # print in red that the node is disconnected
+            self.server.logger.critical(
+                f"{bcolors.FAIL}{'-'*10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!{bcolors.ENDC}"
+            )
+            self.server.rejoin()
+
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
 
@@ -196,6 +203,17 @@ class NodeUDPServer(socketserver.UDPServer):
         self.membership_list = membership_list
         return True
 
+    def rejoin(self):
+        """
+        Rejoin the network by connecting to the introducer
+        and processing the received membership list.
+        :return:
+        """
+        self.membership_list = MembershipList([])
+        self.introducer_socket.close()
+        self.introducer_socket = None
+        self.join_network()
+
     def leave_network(self) -> bool:
         """
         Leave the network by broadcasting a LEAVE message to all neighbors
@@ -255,11 +273,20 @@ class NodeUDPServer(socketserver.UDPServer):
                     failed_members.append(member)
             for member in failed_members:
                 # self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
+
                 self.membership_list.remove(member)
                 leave_message = Message(
                     MessageType.LEAVE, member.ip, member.port, member.timestamp
                 )
                 self.broadcast_to_neighbors(leave_message)
+
+                # send a DISCONNECTED message to the failed member
+                disconnect_message = Message(
+                    MessageType.DISCONNECTED, member.ip, member.port, member.timestamp
+                )
+                self.socket.sendto(
+                    disconnect_message.serialize(), (member.ip, member.port)
+                )
 
     def start_heartbeat_watchdog(self):
         """
