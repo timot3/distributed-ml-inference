@@ -90,7 +90,6 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 
     def handle(self):
         self.server.logger.debug("Handling request from {}".format(self.client_address))
-        # data, sock = self.request
         data = self.request[0]
         data = data.strip()
         sock = self.request[1]
@@ -160,7 +159,6 @@ class NodeUDPServer(socketserver.UDPServer):
 
         # set the handler class
         self.RequestHandlerClass = NodeHandler
-        # do all the other heavy lifting in the server_bind method
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -172,11 +170,11 @@ class NodeUDPServer(socketserver.UDPServer):
         """
         Join the network by connecting to the introducer
         and processing the received membership list.
-        :return:
+        :return: If the connection was successful
         """
 
         if self.introducer_socket is not None:
-            self.logger.info("Already connected to the introducer")
+            self.logger.error("Already connected to the introducer")
             return False
         self.introducer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         # send a message to the introducer to register this node
@@ -241,7 +239,7 @@ class NodeUDPServer(socketserver.UDPServer):
         It does this by sending pings to neighbors
         If a neighbor does not respond to a ping, it is removed from the membership list
         And a LEAVE message is broadcast to all neighbors
-        :return:
+        :return: Never returns
         """
         while True:
             # send a ping to all neighbors
@@ -307,14 +305,6 @@ class NodeUDPServer(socketserver.UDPServer):
         raise NotImplementedError()
         pass
 
-    def broadcast_to_neighbors(self, message):
-        neighbors = MembershipList(self.get_neighbors())
-        for neighbor in neighbors:
-            if neighbor == self.member:
-                continue
-            self.logger.info("Sending {} to {}".format(message, neighbor))
-            self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
-
     def get_neighbors(self) -> List[Member]:
         # return a list of neighbors
         # treat neighbors as a circular list
@@ -336,11 +326,17 @@ class NodeUDPServer(socketserver.UDPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
+    def broadcast_to_neighbors(self, message):
+        neighbors = MembershipList(self.get_neighbors())
+        for neighbor in neighbors:
+            if neighbor == self.member:
+                continue
+            self.logger.info("Sending {} to {}".format(message, neighbor))
+            self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
+
+
     def add_new_member(self, member) -> None:
-        # add a new member to the membership list
-        if member not in self.membership_list:
-            self.membership_list.append(member)
-        # otherwise, update the timestamp of the member
+        # add the new member to the membership list
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
@@ -363,7 +359,3 @@ class NodeUDPServer(socketserver.UDPServer):
             self.logger.error("I am not in membership list!")
         return idx
 
-    def process_leave(self, message, sender) -> None:
-        # remove the node from the membership list
-        raise NotImplementedError()
-        pass

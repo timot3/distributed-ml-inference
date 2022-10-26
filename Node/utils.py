@@ -5,7 +5,7 @@ import textwrap
 from Node.types import bcolors
 
 
-def get_self_ip_and_port(sock) -> (str, int):
+def get_self_ip_and_port(sock):
     """
     Gets the ip and port of the socket
     :param sock: the socket

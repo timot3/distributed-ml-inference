@@ -166,12 +166,12 @@ class MembershipList(list):
     def update_heartbeat(self, member, new_timestamp) -> bool:
         # find the member in the list
         for m in self:
-            if m.ip == member.ip and m.port == member.port:
+            if m.is_same_machine_as(member):
                 # update the timestamp
                 m.last_heartbeat = new_timestamp
                 return True
 
-        logging.getLogger(__name__).warning(
+        logging.getLogger(__name__).info(
             f"Could not find {member} in membership list"
         )
         return False
