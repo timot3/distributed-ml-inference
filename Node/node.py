@@ -334,7 +334,6 @@ class NodeUDPServer(socketserver.UDPServer):
             self.logger.info("Sending {} to {}".format(message, neighbor))
             self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
 
-
     def add_new_member(self, member) -> None:
         # add the new member to the membership list
         if not self.membership_list.update_heartbeat(member, member.timestamp):
@@ -358,4 +357,3 @@ class NodeUDPServer(socketserver.UDPServer):
         except ValueError:
             self.logger.error("I am not in membership list!")
         return idx
-

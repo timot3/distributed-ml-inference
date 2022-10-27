@@ -171,9 +171,7 @@ class MembershipList(list):
                 m.last_heartbeat = new_timestamp
                 return True
 
-        logging.getLogger(__name__).info(
-            f"Could not find {member} in membership list"
-        )
+        logging.getLogger(__name__).info(f"Could not find {member} in membership list")
         return False
 
     def get_machine(self, member) -> Optional[Member]:

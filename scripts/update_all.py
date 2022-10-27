@@ -9,7 +9,6 @@ import subprocess
 import sys
 from concurrent.futures import ThreadPoolExecutor
 
-from log_urls import log_url_list
 
 NUM_VM = 10
 
@@ -39,7 +38,13 @@ def run_wrapper(args: list):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("-n", "--netID", type=str, required=True, help="netID, will be checked for correctness")
+    parser.add_argument(
+        "-n",
+        "--netID",
+        type=str,
+        required=True,
+        help="netID, will be checked for correctness",
+    )
     parser.add_argument("-i", "--pub", type=str, default=None, help="Path to publickey")
 
     args = parser.parse_args()
@@ -50,7 +55,9 @@ def main():
 
     curdir = os.getcwd()
     if not curdir.endswith("ece428_mp1/scripts"):
-        print(f"curdir is: {curdir} . It is not in a directory with path ending with 'ece428_mp1/scripts'!")
+        print(
+            f"curdir is: {curdir} . It is not in a directory with path ending with 'ece428_mp1/scripts'!"
+        )
         return 1
 
     pubkey_arg = ""
@@ -61,12 +68,6 @@ def main():
     with ThreadPoolExecutor(max_workers=NUM_VM) as executor:
         for i in range(1, NUM_VM + 1):
             vmurl = f"{args.netID}@fa22-cs425-25{i:02}.cs.illinois.edu"
-            logurl = log_url_list[i]
-            logname = f"vm{i}.log"
-            command = f"ssh {pubkey_arg} {vmurl} 'bash -s' < {curdir}/vm_ssh_update.sh {args.netID} {logurl} {logname} {i}"
-            print(f"command: {command}")
-            # submit run_wrapper to thread pool
-            executor.submit(run_wrapper, command)
 
 
 if __name__ == "__main__":
