@@ -3,7 +3,7 @@ import socketserver
 import socket
 import threading
 import time
-from typing import List
+from typing import List, Tuple
 
 from .types import (
     MessageType,
@@ -13,16 +13,26 @@ from .types import (
     HEARTBEAT_WATCHDOG_TIMEOUT,
     bcolors,
 )
-from .utils import get_self_ip_and_port
+from .utils import get_self_ip_and_port, in_red, timed_out
+
+from FileStore.FileStoreNode import FileStoreNode
 
 
 # the handler class is responsible for handling the request
-class NodeHandler(socketserver.DatagramRequestHandler):
-    def _send_ack(self):
-        ack_message = Message(
-            MessageType.PONG, self.server.host, self.server.port, self.server.timestamp
-        )
-        self.socket.sendto(ack_message.serialize(), self.client_address)
+class NodeHandler(socketserver.BaseRequestHandler):
+    def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                if s.connect_ex(addr) != 0:
+                    raise ConnectionError("Could not connect to {}".format(addr))
+
+                s.sendall(msg.serialize())
+            return True
+
+        except Exception as e:
+            self.server.logger.error(f"Error sending message: {e}")
+        finally:
+            return False
 
     def _process_ack(self, message):
         ack_machine = Member(message.ip, message.port, message.timestamp)
@@ -41,6 +51,7 @@ class NodeHandler(socketserver.DatagramRequestHandler):
         :param sender: The machine that sent the message
         :return: None
         """
+        self.server.logger.debug("Processing message: {}".format(message))
         # vary the behavior based on the message type
         if message.message_type == MessageType.JOIN:
             # self.server.process_join(message, sender)
@@ -58,17 +69,19 @@ class NodeHandler(socketserver.DatagramRequestHandler):
             self.server.add_new_member(new_member)
 
         elif message.message_type == MessageType.PING:
-            self.server.logger.info("Sending ACK to {}".format(self.client_address))
-            self._send_ack()
+            ack_message = Message(
+                MessageType.PONG,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+            )
+            addr = (message.ip, message.port)
+            self._send(ack_message, addr)
 
         elif message.message_type == MessageType.PONG:
-            self.server.logger.info("Received ACK from {}".format(self.client_address))
             self._process_ack(message)
 
         elif message.message_type == MessageType.LEAVE:
-            self.server.logger.info(
-                "Received LEAVE from {}".format(self.client_address)
-            )
             leaving_member = Member(message.ip, message.port, message.timestamp)
             if leaving_member not in self.server.membership_list:
                 self.server.logger.info(
@@ -80,9 +93,10 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 
         elif message.message_type == MessageType.DISCONNECTED:
             # print in red that the node is disconnected
-            self.server.logger.critical(
-                f"{bcolors.FAIL}{'-'*10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!{bcolors.ENDC}"
-            )
+            fail_str = f"{'-' * 10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!"
+            self.server.logger.critical(in_red(fail_str))
+            self.server.in_ring = False
+            time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
             self.server.rejoin()
 
         else:
@@ -90,9 +104,8 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 
     def handle(self):
         self.server.logger.debug("Handling request from {}".format(self.client_address))
-        data = self.request[0]
+        data = self.request.recv(1024)
         data = data.strip()
-        sock = self.request[1]
 
         if len(data) == 0:
             return
@@ -109,29 +122,21 @@ class NodeHandler(socketserver.DatagramRequestHandler):
 
         # deserialize the message
         received_message = Message.deserialize(data)
-        self.server.logger.info("RECEIVED: " + str(received_message))
         self._process_message(received_message, sender=machine_of_sender)
-
-    def finish(self):
-        # determine if self wfile has any data
-        # if it does, send it to the client
-        # if len(self.wfile.getvalue()) > 0:
-        #     self.socket.sendto(self.wfile.getvalue(), self.client_address)
-        self.wfile.flush()
 
 
 # the node class is a subclass of UDPServer
 # Its server bind method is called when the server is created
-# and connects to the introducer server via a tcp scket
-class NodeUDPServer(socketserver.UDPServer):
+# and connects to the introducer server via a tcp socket
+class NodeTCPServer(socketserver.ThreadingTCPServer):
     def __init__(
-        self,
-        host,
-        port,
-        introducer_host,
-        introducer_port,
-        is_introducer=False,
-        slow_mode=False,
+            self,
+            host,
+            port,
+            introducer_host,
+            introducer_port,
+            is_introducer=False,
+            slow_mode=False,
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
@@ -144,7 +149,7 @@ class NodeUDPServer(socketserver.UDPServer):
         self.introducer_host = introducer_host
         self.introducer_port = introducer_port
 
-        # initalized when the node joins the network
+        # initialized when the node joins the network
         self.timestamp: int = 0
         self.member: Member = None
 
@@ -155,6 +160,8 @@ class NodeUDPServer(socketserver.UDPServer):
         # it will be initialized when the node joins the network
         self.introducer_socket = None
 
+        self.in_ring = False
+
         self.membership_list = MembershipList([])
 
         # set the handler class
@@ -164,6 +171,10 @@ class NodeUDPServer(socketserver.UDPServer):
         data = request[0]
         if len(data) == 0:
             return False
+        if not self.in_ring:
+            self.logger.info("Not in ring yet. Ignoring message: {}".format(message))
+            return False
+
         super().validate_request(request, message)
 
     def join_network(self) -> bool:
@@ -199,6 +210,7 @@ class NodeUDPServer(socketserver.UDPServer):
         membership_list = MembershipList.deserialize(response)
         self.logger.info("Received membership list: {}".format(membership_list))
         self.membership_list = membership_list
+        self.in_ring = True
         return True
 
     def rejoin(self):
@@ -231,6 +243,7 @@ class NodeUDPServer(socketserver.UDPServer):
         # disconnect the introducer socket
         self.introducer_socket.close()
         self.introducer_socket = None
+        self.in_ring = False
         return True
 
     def _heartbeat_watchdog(self):
@@ -256,20 +269,15 @@ class NodeUDPServer(socketserver.UDPServer):
             # check if any neighbors have failed
             # if they have, remove them from the membership list
             # and broadcast a LEAVE message to all neighbors
-            failed_members = []
+            failed_neighbors = []
             neighbors = self.get_neighbors()
             for member in neighbors:
-                if (
-                    member.last_heartbeat
-                    < int(time.time()) - HEARTBEAT_WATCHDOG_TIMEOUT
-                ):
-                    self.logger.warning(
-                        "Member {} has timed out ping/ack. Marking failed!".format(
-                            member
-                        )
-                    )
-                    failed_members.append(member)
-            for member in failed_members:
+                if timed_out(member.last_heartbeat, HEARTBEAT_WATCHDOG_TIMEOUT):
+                    failed_str = "Member {} has timed out ping/ack. Marking failed!".format(member)
+                    self.logger.warning(in_red(failed_str))
+                    failed_neighbors.append(member)
+
+            for member in failed_neighbors:
                 # self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
 
                 self.membership_list.remove(member)
@@ -282,9 +290,11 @@ class NodeUDPServer(socketserver.UDPServer):
                 disconnect_message = Message(
                     MessageType.DISCONNECTED, member.ip, member.port, member.timestamp
                 )
-                self.socket.sendto(
-                    disconnect_message.serialize(), (member.ip, member.port)
-                )
+
+                # connect to the failed member and send the DISCONNECTED message
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.connect((member.ip, member.port))
+                    s.sendall(disconnect_message.serialize())
 
     def start_heartbeat_watchdog(self):
         """
@@ -295,15 +305,6 @@ class NodeUDPServer(socketserver.UDPServer):
         thread = threading.Thread(target=self._heartbeat_watchdog, daemon=True)
         thread.start()
         return thread
-
-    def server_bind(self) -> None:
-        # call the super class server_bind method
-        super().server_bind()
-
-    def multicast(self, message) -> None:
-        # send the message to all other nodes
-        raise NotImplementedError()
-        pass
 
     def get_neighbors(self) -> List[Member]:
         # return a list of neighbors
@@ -326,13 +327,30 @@ class NodeUDPServer(socketserver.UDPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
+    def _send(self, message: Message, member: Member) -> bool:
+        """
+        Send a message to a member
+        :param message: The message to send
+        :param member: The member to send the message to
+        :return: if send was successful
+        """
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.connect((member.ip, member.port))
+                s.sendall(message.serialize())
+        except Exception as e:
+            self.logger.error("Failed to send message to member {}: {}".format(member, e))
+            return False
+
+        return True
+
     def broadcast_to_neighbors(self, message):
         neighbors = MembershipList(self.get_neighbors())
         for neighbor in neighbors:
             if neighbor == self.member:
                 continue
-            self.logger.info("Sending {} to {}".format(message, neighbor))
-            self.socket.sendto(message.serialize(), (neighbor.ip, neighbor.port))
+            self.logger.debug("Sending {} to {}".format(message, neighbor))
+            self._send(message, neighbor)
 
     def add_new_member(self, member) -> None:
         # add the new member to the membership list

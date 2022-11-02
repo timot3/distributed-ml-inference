@@ -1,8 +1,21 @@
 import socket
 import struct
 import textwrap
+import time
 
 from Node.types import bcolors
+
+
+def in_red(text):
+    return bcolors.FAIL + text + bcolors.ENDC
+
+
+def in_green(text):
+    return bcolors.OKGREEN + text + bcolors.ENDC
+
+
+def in_blue(text):
+    return bcolors.OKBLUE + text + bcolors.ENDC
 
 
 def get_self_ip_and_port(sock):
@@ -65,3 +78,7 @@ def run_node_command_menu(node):
     while True:
         command = _get_command_option()
         _handle_command(node, command)
+
+
+def timed_out(timestamp, timeout):
+    return time.time() - timestamp > timeout

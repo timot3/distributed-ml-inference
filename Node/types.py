@@ -3,6 +3,9 @@ import struct
 from enum import IntEnum
 from typing import List, Any, Optional
 import logging
+from threading import Lock
+
+lock = Lock()
 
 # timeout duration of heartbeat
 HEARTBEAT_WATCHDOG_TIMEOUT = 5
@@ -168,7 +171,9 @@ class MembershipList(list):
         for m in self:
             if m.is_same_machine_as(member):
                 # update the timestamp
-                m.last_heartbeat = new_timestamp
+                # acquire a lock
+                with lock.acquire():
+                    m.last_heartbeat = new_timestamp
                 return True
 
         logging.getLogger(__name__).info(f"Could not find {member} in membership list")
