@@ -107,10 +107,57 @@ class Message:
 
 class FileStoreMessage(Message):
     def __init__(
-        self, message_type: MessageType, ip: str, port: int, timestamp: int, data: Any
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        file_name: str,
+        data: Any,
     ):
         super().__init__(message_type, ip, port, timestamp)
+        self.file_name = file_name
         self.data = data
+
+    def serialize(self):
+        """
+        Serialize the message into bytes
+        :return: the bytes representation of the message
+        """
+        base_message = super().serialize()
+        # pack the filename into a 32 byte string using struct.pack
+        file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
+
+        # convert data to bytes
+        data = self.data.encode("utf-8")
+
+        # finally, append all the bytes together
+        return base_message + file_name + data
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        # get the message type
+        # the first 12 bytes are the same as the communication message
+        base_message = Message.deserialize(data[:12])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # the next 32 bytes (bytes 12 - 44) are the file name
+        # use struct.unpack to get the file name, then convert it to a string
+        file_name = struct.unpack(">32s", data[12:44])[0].decode("utf-8").strip("\x00")
+
+        # the rest of the data is the filestore data
+        # use struct.unpack to get the data, then convert it to a string
+
+        # first, get the length of the data
+        remaining_len = len(data) - 44
+        # then, get the data as bytes
+        filestore_data = struct.unpack(f">{remaining_len}s", data[44:])[0]
+
+        # fnally, construct the FileStoreMessage
+        return cls(message_type, ip, port, timestamp, file_name, filestore_data)
 
 
 class Member:

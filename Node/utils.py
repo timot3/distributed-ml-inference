@@ -3,7 +3,7 @@ import struct
 import textwrap
 import time
 
-from Node.types import bcolors, MessageType
+from Node.types import bcolors, MessageType, Message, FileStoreMessage
 
 
 def is_communication_message(message_type: int) -> bool:
@@ -13,7 +13,10 @@ def is_communication_message(message_type: int) -> bool:
     :return: True if the message is a communication message, False otherwise
     """
     return (
-        message_type == MessageType.JOIN.value or message_type == MessageType.LEAVE.value
+        message_type == MessageType.JOIN
+        or message_type == MessageType.LEAVE
+        or message_type == MessageType.PING
+        or message_type == MessageType.PONG
     )
 
 
@@ -25,10 +28,10 @@ def is_election_message(message_type: int) -> bool:
     """
     raise NotImplementedError
     # future work
-    return (
-        message_type == MessageType.ELECT_SEND.value
-        or message_type == MessageType.CLAIM_LEADER.value
-    )
+    # return (
+    #     message_type == MessageType.ELECT_SEND.value
+    #     or message_type == MessageType.CLAIM_LEADER.value
+    # )
 
 
 def is_filestore_message(message_type: int) -> bool:
@@ -131,3 +134,31 @@ def run_node_command_menu(node):
 
 def timed_out(timestamp, timeout):
     return time.time() - timestamp > timeout
+
+
+def get_message_from_bytes(data: bytes) -> Message:
+    """
+    Factory method to get either a Message, FileStoreMessage, or ElectionMessage
+    from a byte array.
+
+    :param data: the bytes received
+    :return: the Message, FileStoreMessage, or ElectionMessage
+    """
+    # the first byte of the message is the message type
+    # get it with struct.unpack
+
+    if len(data) == 0:
+        raise ValueError("Empty message")
+
+    message_type = struct.unpack(">B", data[:1])[0]
+
+    if is_communication_message(message_type):
+        return Message.deserialize(data)
+    elif is_filestore_message(message_type):
+        return FileStoreMessage.deserialize(data)
+    elif is_election_message(message_type):
+        raise NotImplementedError
+        # future work
+        # return ElectionMessage.deserialize(data)
+    else:
+        raise ValueError("Invalid message type")

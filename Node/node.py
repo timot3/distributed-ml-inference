@@ -23,12 +23,10 @@ from .utils import (
     in_blue,
     timed_out,
     trim_len_prefix,
+    get_message_from_bytes,
 )
 
-from FileStore.FileStoreNode import FileStoreNode
 
-
-# the handler class is responsible for handling the request
 class NodeHandler(socketserver.BaseRequestHandler):
     def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
         try:
@@ -57,10 +55,10 @@ class NodeHandler(socketserver.BaseRequestHandler):
             if not msg:
                 break
             data.extend(msg)
-
+        self.server.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
         return data
 
-    def _process_ack(self, message):
+    def _process_ack(self, message: Message) -> None:
         ack_machine = Member(message.ip, message.port, message.timestamp)
         now = int(time.time())
         if self.server.membership_list.update_heartbeat(ack_machine, now):
@@ -70,7 +68,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 "Machine {} not found in membership list".format(ack_machine)
             )
 
-    def _process_message(self, message, sender=None) -> None:
+    def _process_message(self, message) -> None:
         """
         Process the message and take the appropriate action
         :param message: The received message
@@ -135,25 +133,15 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
-            self.server.file_store.put(message.key, message.value)
+            raise NotImplementedError
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
-            value = self.server.file_store.get(message.key)
-            response = Message(
-                MessageType.GET_RESPONSE,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                key=message.key,
-                value=value,
-            )
-            addr = (message.ip, message.port)
-            self._send(response, addr)
+            raise NotImplementedError
 
         # handle DELETE for file store
         elif message.message_type == MessageType.DELETE:
-            self.server.file_store.delete(message.key)
+            raise NotImplementedError
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
@@ -177,8 +165,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
         machine_of_sender = Member(ip_of_sender, port_of_sender, timestamp_of_sender)
 
         # deserialize the message
-        received_message = Message.deserialize(data)
-        self._process_message(received_message, sender=machine_of_sender)
+        received_message = get_message_from_bytes(data)
+        self._process_message(received_message)
 
 
 # the node class is a subclass of UDPServer
