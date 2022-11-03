@@ -9,7 +9,7 @@ ELECTION_PORT = 8787
 LEADER_PORT = 8788
 VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
 
-# Useful for displaying purposes, not used for functionality
+# Useful for displaying/debugging purposes, not used for functionality
 ip_url_dict = {
     socket.gethostbyname(f"fa22-cs425-25{i:02}.cs.illinois.edu"): f"fa22-cs425-25{i:02}.cs.illinois.edu" 
     for i in range(1, 10)
@@ -19,14 +19,14 @@ ip_url_dict = {
 The class can return a dead leader, so nodes checking for the leader still 
 need to check if the so-called leader is valid.
 '''
-# class DNSEmulator:
 class DNSDaemon:
-    introducer_ip = socket.gethostbyname(VM1_URL)
-    introducer_ip = "127.0.0.1"
+    daemon_ip = socket.gethostbyname(VM1_URL)
+    daemon_ip = "127.0.0.1"
     lock = threading.Lock()
     electionSocket = None
     processJoinSocket = None
     def __init__(self) -> None:
+        # TODO: Integrate with Node logic for elections
         # self.electionThread = threading.Thread(target=self.electionRoutine, daemon=True)
         self.processJoinThread = threading.Thread(target=self.getLeaderRoutine, daemon=True)
         # self.electionThread.start()
@@ -111,10 +111,10 @@ class DNSDaemon:
 
 
 def main():
-    # translator = DNSEmulator()
     translator = DNSDaemon()
-    introducer_ip = socket.gethostbyname(VM1_URL)
-    introducer_ip = "127.0.0.1"
+
+    daemon_ip = socket.gethostbyname(VM1_URL)
+    daemon_ip = "127.0.0.1"
     for i in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             print(f"introducer_ip: {introducer_ip}")
@@ -126,8 +126,9 @@ def main():
                 print(f"Received data from server: {data}")
                 if (data.decode()):
                     sock.sendall(b"ACK")
-                # TODO: Join server implied by data (IP addr in str). This server may be incorrect, so waiting for 
+                # TODO: Join ring implied by data (IP addr in str). This server may be incorrect, so waiting for 
                 # the correct value to quiesce is necessary (by sleeping)
+
             except:
                 print("Exception when trying to join, trying again")
                 i -= 1
@@ -135,13 +136,6 @@ def main():
                 continue
     print("Test program done")
     return
-
-
-
-
-# Just before election ends, update file
-
-# Election end, unlock file
 
 if __name__ == "__main__":
     main()
