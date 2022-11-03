@@ -20,8 +20,8 @@ The class can return a dead leader, so nodes checking for the leader still
 need to check if the so-called leader is valid.
 '''
 class DNSDaemon:
-    daemon_ip = socket.gethostbyname(VM1_URL)
-    daemon_ip = "127.0.0.1"
+    introducer_ip = socket.gethostbyname(VM1_URL)
+    introducer_ip = "127.0.0.1"
     lock = threading.Lock()
     electionSocket = None
     processJoinSocket = None
@@ -88,10 +88,10 @@ class DNSDaemon:
         with self.lock:
             self.introducer_ip = new_introducer_addr
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_out:
-                sock_out.bind((new_introducer_addr, LEADER_PORT))
+                sock_out.connect((new_introducer_addr, LEADER_PORT))
                 sock_out.sendall(b'ACK')
-                # release lock
                 print(f"Introducer updated to {self.introducer_ip}, corresponding to address {ip_url_dict}")
+            # release lock
 
     def handleOneJoinPacket(self, conn, desiredPacket, ackPacket=None):
         # desiredPacket should be decoded
@@ -117,10 +117,10 @@ def main():
     daemon_ip = "127.0.0.1"
     for i in range(100):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-            print(f"introducer_ip: {introducer_ip}")
+            print(f"introducer_ip: {daemon_ip}")
             try:
                 # sleep(0.1)
-                sock.connect((introducer_ip, LEADER_PORT))
+                sock.connect((daemon_ip, LEADER_PORT))
                 sock.sendall(b"JOIN")
                 data = sock.recv(1024)
                 print(f"Received data from server: {data}")
