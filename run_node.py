@@ -1,6 +1,6 @@
 import threading
 
-from Node.node import NodeUDPServer
+from Node.node import NodeTCPServer
 from Node.utils import get_any_open_port, run_node_command_menu
 import logging
 
@@ -18,7 +18,7 @@ if __name__ == "__main__":
     INTRODUCER_HOST, INTRODUCER_PORT = "127.0.0.1", 8080
     # create a udp server that resuses the address
 
-    with NodeUDPServer(
+    with NodeTCPServer(
         HOST, PORT, INTRODUCER_HOST, INTRODUCER_PORT, is_introducer=False
     ) as node:
         node.allow_reuse_address = True
