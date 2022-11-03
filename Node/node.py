@@ -389,14 +389,14 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def get_membership_list(self):
+    def get_membership_list(self) -> MembershipList:
         """
         Get the membership list
         :return: membership_list as a MembershipList object
         """
         return self.membership_list
 
-    def get_self_id(self):
+    def get_self_id(self) -> int:
         """
         Get the id of this node
         :return: The location of this node in the membership list

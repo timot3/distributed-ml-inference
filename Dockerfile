@@ -25,4 +25,3 @@ CMD if [ "$NODE_TYPE" = "introducer" ]; then \
     else \
         python3 node.py; \
     fi
-

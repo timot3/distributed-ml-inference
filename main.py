@@ -35,7 +35,7 @@ def start_on_docker(num_nodes=10, num_introducers=1, num_replicas=3):
             command: python3 run_node.py
             container_name: server{host}
             environment:
-              ID: "{host}" 
+              ID: "{host}"
             networks:
               static-network:
                 ipv4_address: 172.19.0.{host + 2}"""
