@@ -120,9 +120,7 @@ class IntroducerServer(socketserver.TCPServer):
     def broadcast_join(self, machine):
         self.logger.info(f"Sending membership list message to {str(machine)}")
         # create a join message
-        join_msg = Message(
-            MessageType.JOIN, machine.ip, machine.port, machine.timestamp
-        )
+        join_msg = Message(MessageType.JOIN, machine.ip, machine.port, machine.timestamp)
 
         # send the join message to self's node server
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:

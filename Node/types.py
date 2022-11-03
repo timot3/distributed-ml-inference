@@ -108,6 +108,19 @@ class Member:
     def __str__(self):
         return f"Member(ip={self.ip}, port={self.port}, timestamp={self.timestamp})"
 
+    def __repr__(self) -> str:
+        return self.__str__()
+
+    def __eq__(self, other):
+        return (
+            self.ip == other.ip
+            and self.port == other.port
+            and self.timestamp == other.timestamp
+        )
+
+    def __hash__(self):
+        return hash((self.ip, self.port, self.timestamp))
+
     def to_tuple(self):
         return self.ip, self.port, self.timestamp
 
@@ -144,13 +157,6 @@ class Member:
             raise ValueError(f"Invalid timestamp: {timestamp}")
         return Member(ip, port, timestamp)
 
-    def __eq__(self, other):
-        return (
-            self.ip == other.ip
-            and self.port == other.port
-            and self.timestamp == other.timestamp
-        )
-
     def is_same_machine_as(self, other) -> bool:
         return self.ip == other.ip and self.port == other.port
 
@@ -172,7 +178,7 @@ class MembershipList(list):
             if m.is_same_machine_as(member):
                 # update the timestamp
                 # acquire a lock
-                with lock.acquire():
+                with lock:
                     m.last_heartbeat = new_timestamp
                 return True
 

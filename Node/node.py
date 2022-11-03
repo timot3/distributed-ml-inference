@@ -1,9 +1,10 @@
+import concurrent.futures
 import logging
 import socketserver
 import socket
 import threading
 import time
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 
 from .types import (
     MessageType,
@@ -13,7 +14,7 @@ from .types import (
     HEARTBEAT_WATCHDOG_TIMEOUT,
     bcolors,
 )
-from .utils import get_self_ip_and_port, in_red, timed_out
+from .utils import get_self_ip_and_port, in_red, in_blue, timed_out
 
 from FileStore.FileStoreNode import FileStoreNode
 
@@ -56,11 +57,10 @@ class NodeHandler(socketserver.BaseRequestHandler):
         if message.message_type == MessageType.JOIN:
             # self.server.process_join(message, sender)
             new_member = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
             if self.server.membership_list.has_machine(new_member):
                 self.server.logger.debug(
-                    "Machine {} already exists in the membership list".format(
-                        new_member
-                    )
+                    "Machine {} already exists in the membership list".format(new_member)
                 )
                 return
             self.server.broadcast_to_neighbors(message)
@@ -83,6 +83,10 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         elif message.message_type == MessageType.LEAVE:
             leaving_member = Member(message.ip, message.port, message.timestamp)
+
+            self.server.logger.info(
+                in_blue(f"Received LEAVE message from {leaving_member}")
+            )
             if leaving_member not in self.server.membership_list:
                 self.server.logger.info(
                     "Machine {} not found in membership list".format(leaving_member)
@@ -130,13 +134,13 @@ class NodeHandler(socketserver.BaseRequestHandler):
 # and connects to the introducer server via a tcp socket
 class NodeTCPServer(socketserver.ThreadingTCPServer):
     def __init__(
-            self,
-            host,
-            port,
-            introducer_host,
-            introducer_port,
-            is_introducer=False,
-            slow_mode=False,
+        self,
+        host,
+        port,
+        introducer_host,
+        introducer_port,
+        is_introducer=False,
+        slow_mode=False,
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
@@ -252,49 +256,41 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         It does this by sending pings to neighbors
         If a neighbor does not respond to a ping, it is removed from the membership list
         And a LEAVE message is broadcast to all neighbors
-        :return: Never returns
+        :return: Never returnse
         """
         while True:
+            time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
+            if not self.in_ring or self.member is None:
+                continue
+
             # send a ping to all neighbors
             self.logger.debug("Sending Heartbeat PING to neighbors")
             ping_message = Message(
-                MessageType.PING,
-                self.member.ip,
-                self.member.port,
-                self.member.timestamp,
+                MessageType.PING, self.member.ip, self.member.port, self.member.timestamp,
             )
-            self.broadcast_to_neighbors(ping_message)
+            responses = self.broadcast_to_neighbors(ping_message)
             # sleep for HEARTBEAT_WATCHDOG_TIMEOUT seconds
-            time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
             # check if any neighbors have failed
             # if they have, remove them from the membership list
             # and broadcast a LEAVE message to all neighbors
-            failed_neighbors = []
-            neighbors = self.get_neighbors()
-            for member in neighbors:
-                if timed_out(member.last_heartbeat, HEARTBEAT_WATCHDOG_TIMEOUT):
-                    failed_str = "Member {} has timed out ping/ack. Marking failed!".format(member)
-                    self.logger.warning(in_red(failed_str))
-                    failed_neighbors.append(member)
 
-            for member in failed_neighbors:
-                # self.logger.warning("Member {} has timed out ping/ack. Marking failed!".format(member))
+            for member, response in responses.items():
+                if not response:
+                    self.logger.info("Member {} has failed".format(member))
+                    self.membership_list.remove(member)
 
-                self.membership_list.remove(member)
-                leave_message = Message(
-                    MessageType.LEAVE, member.ip, member.port, member.timestamp
-                )
-                self.broadcast_to_neighbors(leave_message)
+                    # send a disconnect mesage to the failed member
+                    disconnect_message = Message(
+                        MessageType.DISCONNECTED, member.ip, member.port, member.timestamp
+                    )
+                    self._send(disconnect_message, member)
 
-                # send a DISCONNECTED message to the failed member
-                disconnect_message = Message(
-                    MessageType.DISCONNECTED, member.ip, member.port, member.timestamp
-                )
+                    # broadcast a LEAVE message to all neighbors with the failed member's info
 
-                # connect to the failed member and send the DISCONNECTED message
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                    s.connect((member.ip, member.port))
-                    s.sendall(disconnect_message.serialize())
+                    leave_message = Message(
+                        MessageType.LEAVE, member.ip, member.port, member.timestamp
+                    )
+                    self.broadcast_to_neighbors(leave_message)
 
     def start_heartbeat_watchdog(self):
         """
@@ -336,21 +332,57 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(1)
                 s.connect((member.ip, member.port))
                 s.sendall(message.serialize())
         except Exception as e:
-            self.logger.error("Failed to send message to member {}: {}".format(member, e))
+            self.logger.error(
+                in_red("Failed to send message to member {}: {}".format(member, e))
+            )
             return False
 
         return True
 
-    def broadcast_to_neighbors(self, message):
+    def broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
+        """
+        Broadcast a message to all neighbors
+        :param message: the message to broadcast
+        :return: a dict of neighbors and whether the message was sent successfully
+        """
+        neighbors_to_successes = {}
+        neighbors = MembershipList(self.get_neighbors())
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Start the broadcast operations and get whether send was successful for each neighbor
+            future_to_member = {
+                executor.submit(self._send, message, neighbor): neighbor
+                for neighbor in neighbors
+            }
+            for future in concurrent.futures.as_completed(future_to_member):
+                member = future_to_member[future]
+                try:
+                    data = future.result()
+                    neighbors_to_successes[member] = data
+                    self.logger.debug(f"Sent message to {member}")
+                except Exception as exc:
+                    self.logger.critical(
+                        in_red(f"{member} generated an exception: {exc}")
+                    )
+
+        return neighbors_to_successes
+
+    def _broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
+        """
+        Broadcast a message to all neighbors
+        :param message: the message to broadcast
+        :return: a dict of neighbors and whether the message was sent successfully
+        """
+        neighbors_to_successes = {}
         neighbors = MembershipList(self.get_neighbors())
         for neighbor in neighbors:
-            if neighbor == self.member:
-                continue
-            self.logger.debug("Sending {} to {}".format(message, neighbor))
-            self._send(message, neighbor)
+            res = self._send(message, neighbor)
+            neighbors_to_successes[neighbor] = res
+
+        return neighbors_to_successes
 
     def add_new_member(self, member) -> None:
         # add the new member to the membership list
