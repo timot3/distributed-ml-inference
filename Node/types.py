@@ -12,11 +12,20 @@ HEARTBEAT_WATCHDOG_TIMEOUT = 5
 
 
 class MessageType(IntEnum):
+    # Communication messages
     JOIN = 0
     LEAVE = 1
     PING = 2
     PONG = 3
     DISCONNECTED = 4  # sent to node that is disconnected
+
+    # Election messages
+    # todo @zhuxuan: add election messages
+
+    # FileStore messages
+    PUT = 7
+    GET = 8
+    DELETE = 9
 
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal

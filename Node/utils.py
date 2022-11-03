@@ -3,7 +3,45 @@ import struct
 import textwrap
 import time
 
-from Node.types import bcolors
+from Node.types import bcolors, MessageType
+
+
+def is_communication_message(message_type: int) -> bool:
+    """
+    Checks if the message is a communication message
+    :param message_type: the message type
+    :return: True if the message is a communication message, False otherwise
+    """
+    return (
+        message_type == MessageType.JOIN.value or message_type == MessageType.LEAVE.value
+    )
+
+
+def is_election_message(message_type: int) -> bool:
+    """
+    Checks if the message is an election message
+    :param message_type: the message type
+    :return: True if the message is an election message, False otherwise
+    """
+    raise NotImplementedError
+    # future work
+    return (
+        message_type == MessageType.ELECT_SEND.value
+        or message_type == MessageType.CLAIM_LEADER.value
+    )
+
+
+def is_filestore_message(message_type: int) -> bool:
+    """
+    Checks if the message is a filestore message
+    :param message_type: the message type
+    :return: True if the message is a filestore message, False otherwise
+    """
+    return (
+        message_type == MessageType.PUT.value
+        or message_type == MessageType.GET.value
+        or message_type == MessageType.DELETE.value
+    )
 
 
 def in_red(text):

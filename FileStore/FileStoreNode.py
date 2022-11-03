@@ -12,7 +12,9 @@ class FileStoreHandler(socketserver.BaseRequestHandler):
     def recvall(self, sock):
         # use popular method of recvall
         data = bytearray()
-        msg_len, msg = trim_len_prefix(sock.recv(BUFF_SIZE))
+        rec = sock.recv(BUFF_SIZE)
+        msg_len, msg = trim_len_prefix(rec)
+        print("msg_len", msg_len)
         data.extend(msg)
         while len(data) < msg_len:
             msg = sock.recv(BUFF_SIZE)

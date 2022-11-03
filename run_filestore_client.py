@@ -30,7 +30,7 @@ if __name__ == "__main__":
     # read all data from test file
 
     # data = open("test_file", "rb")
-    data = b"a" * 1000000
+    data = b"a" * 10000
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.connect(("localhost", 8082))
         s.sendall(add_len_prefix(data))
