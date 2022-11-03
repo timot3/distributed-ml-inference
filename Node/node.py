@@ -12,9 +12,17 @@ from .types import (
     MembershipList,
     Member,
     HEARTBEAT_WATCHDOG_TIMEOUT,
+    BUFF_SIZE,
     bcolors,
 )
-from .utils import get_self_ip_and_port, in_red, in_blue, timed_out
+from .utils import (
+    add_len_prefix,
+    get_self_ip_and_port,
+    in_red,
+    in_blue,
+    timed_out,
+    trim_len_prefix,
+)
 
 from FileStore.FileStoreNode import FileStoreNode
 
@@ -26,14 +34,30 @@ class NodeHandler(socketserver.BaseRequestHandler):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 if s.connect_ex(addr) != 0:
                     raise ConnectionError("Could not connect to {}".format(addr))
-
-                s.sendall(msg.serialize())
+                msg = add_len_prefix(msg.serialize())
+                s.sendall(msg)
             return True
 
         except Exception as e:
             self.server.logger.error(f"Error sending message: {e}")
         finally:
             return False
+
+    def _recvall(self, sock: socket.socket) -> bytes:
+        # use popular method of recvall
+        data = bytearray()
+        rec = sock.recv(BUFF_SIZE)
+        # remove the length prefix
+        msg_len, msg = trim_len_prefix(rec)
+        data.extend(msg)
+        # read the rest of the data, if any
+        while len(data) < msg_len:
+            msg = sock.recv(BUFF_SIZE)
+            if not msg:
+                break
+            data.extend(msg)
+
+        return data
 
     def _process_ack(self, message):
         ack_machine = Member(message.ip, message.port, message.timestamp)
@@ -55,7 +79,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
         self.server.logger.debug("Processing message: {}".format(message))
         # vary the behavior based on the message type
         if message.message_type == MessageType.JOIN:
-            # self.server.process_join(message, sender)
             new_member = Member(message.ip, message.port, message.timestamp)
             self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
             if self.server.membership_list.has_machine(new_member):
@@ -108,7 +131,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         self.server.logger.debug("Handling request from {}".format(self.client_address))
-        data = self.request.recv(1024)
+        data = self._recvall(self.request)
         data = data.strip()
 
         if len(data) == 0:
@@ -329,10 +352,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
-    def _send(self, message: Message, member: Member) -> bool:
+    def _send(self, msg: Message, member: Member) -> bool:
         """
         Send a message to a member
-        :param message: The message to send
+        :param msg: The message to send
         :param member: The member to send the message to
         :return: if send was successful
         """
@@ -340,7 +363,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 s.settimeout(1)
                 s.connect((member.ip, member.port))
-                s.sendall(message.serialize())
+                msg = add_len_prefix(msg.serialize())
+                s.sendall(msg)
         except Exception as e:
             self.logger.error(
                 in_red("Failed to send message to member {}: {}".format(member, e))
