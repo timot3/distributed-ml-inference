@@ -78,6 +78,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         self.server.logger.debug("Processing message: {}".format(message))
         # vary the behavior based on the message type
+
+        # handle JOIN
         if message.message_type == MessageType.JOIN:
             new_member = Member(message.ip, message.port, message.timestamp)
             self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
@@ -91,6 +93,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # in order to not include the member in neighbors
             self.server.add_new_member(new_member)
 
+        # handle PING
         elif message.message_type == MessageType.PING:
             ack_message = Message(
                 MessageType.PONG,
@@ -101,9 +104,11 @@ class NodeHandler(socketserver.BaseRequestHandler):
             addr = (message.ip, message.port)
             self._send(ack_message, addr)
 
+        # handle PONG (ack)
         elif message.message_type == MessageType.PONG:
             self._process_ack(message)
 
+        # handle LEAVE
         elif message.message_type == MessageType.LEAVE:
             leaving_member = Member(message.ip, message.port, message.timestamp)
 
@@ -118,6 +123,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             self.server.membership_list.remove(leaving_member)
             self.server.broadcast_to_neighbors(message)
 
+        # handle DISCONNECTED
         elif message.message_type == MessageType.DISCONNECTED:
             # print in red that the node is disconnected
             fail_str = f"{'-' * 10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!"
@@ -125,6 +131,28 @@ class NodeHandler(socketserver.BaseRequestHandler):
             self.server.in_ring = False
             time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
             self.server.rejoin()
+
+        # handle PUT for file store
+        elif message.message_type == MessageType.PUT:
+            self.server.file_store.put(message.key, message.value)
+
+        # handle GET for file store
+        elif message.message_type == MessageType.GET:
+            value = self.server.file_store.get(message.key)
+            response = Message(
+                MessageType.GET_RESPONSE,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                key=message.key,
+                value=value,
+            )
+            addr = (message.ip, message.port)
+            self._send(response, addr)
+
+        # handle DELETE for file store
+        elif message.message_type == MessageType.DELETE:
+            self.server.file_store.delete(message.key)
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))

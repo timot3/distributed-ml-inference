@@ -105,6 +105,14 @@ class Message:
         return hash((self.message_type, self.ip, self.port, self.timestamp))
 
 
+class FileStoreMessage(Message):
+    def __init__(
+        self, message_type: MessageType, ip: str, port: int, timestamp: int, data: Any
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.data = data
+
+
 class Member:
     def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = None):
         self.ip: str = ip
