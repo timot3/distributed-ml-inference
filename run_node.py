@@ -6,7 +6,9 @@ import logging
 
 if __name__ == "__main__":
     # set logging config
-    logging.basicConfig(level=logging.INFO,)
+    logging.basicConfig(
+        level=logging.INFO,
+    )
     formatter = logging.Formatter("%(name)s:[%(levelname)-8s] %(message)s")
 
     for handler in logging.root.handlers:

@@ -266,7 +266,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             # send a ping to all neighbors
             self.logger.debug("Sending Heartbeat PING to neighbors")
             ping_message = Message(
-                MessageType.PING, self.member.ip, self.member.port, self.member.timestamp,
+                MessageType.PING,
+                self.member.ip,
+                self.member.port,
+                self.member.timestamp,
             )
             responses = self.broadcast_to_neighbors(ping_message)
             # sleep for HEARTBEAT_WATCHDOG_TIMEOUT seconds
@@ -281,7 +284,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
                     # send a disconnect mesage to the failed member
                     disconnect_message = Message(
-                        MessageType.DISCONNECTED, member.ip, member.port, member.timestamp
+                        MessageType.DISCONNECTED,
+                        member.ip,
+                        member.port,
+                        member.timestamp,
                     )
                     self._send(disconnect_message, member)
 
