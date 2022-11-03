@@ -13,8 +13,8 @@ TOPDIR="/home/${NETID}/ece428"
 
 cd "$TOPDIR"
 
-if [ -d "ece428_mp1" ] 
-then 
+if [ -d "ece428_mp1" ]
+then
     cd ece428_mp1
     echo "ece428_mp1 directory found! Performing git pull!"
     git pull --ff-only

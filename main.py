@@ -35,7 +35,7 @@ def start_on_docker(num_nodes=10, num_introducers=1, num_replicas=3):
             command: python3 run_node.py
             container_name: server{host}
             environment:
-              ID: "{host}" 
+              ID: "{host}"
             networks:
               static-network:
                 ipv4_address: 172.19.0.{host + 2}"""
@@ -95,10 +95,7 @@ if __name__ == "__main__":
         "-r", "--remote", action="store_true", help="Start nodes on remote machines"
     )
     parser.add_argument(
-        "-s",
-        "--separate",
-        action="store_true",
-        help="Start nodes in separate terminals",
+        "-s", "--separate", action="store_true", help="Start nodes in separate terminals",
     )
     parser.add_argument(
         "-p", "--port", type=int, default=8080, help="Port to start introducer on"

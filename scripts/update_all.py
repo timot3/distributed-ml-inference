@@ -17,9 +17,7 @@ NUM_VM = 10
 
 
 def run_wrapper(args: list):
-    p = subprocess.Popen(
-        args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True
-    )
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 
     sel = selectors.DefaultSelector()
     sel.register(p.stdout, selectors.EVENT_READ)

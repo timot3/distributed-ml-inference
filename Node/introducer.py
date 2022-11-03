@@ -4,7 +4,7 @@ import threading
 import time
 import sys
 from .types import Message, MessageType, MembershipList, Member
-from .node import NodeUDPServer
+from .node import NodeTCPServer
 from .utils import get_any_open_port, get_self_ip_and_port
 import logging
 
@@ -81,7 +81,7 @@ class IntroducerServer(socketserver.TCPServer):
 
         open_port = get_any_open_port()
 
-        self.node = NodeUDPServer(host, open_port, host, port)
+        self.node = NodeTCPServer(host, open_port, host, port)
 
     def _start_node_server(self):
         with self.node:
@@ -120,11 +120,9 @@ class IntroducerServer(socketserver.TCPServer):
     def broadcast_join(self, machine):
         self.logger.info(f"Sending membership list message to {str(machine)}")
         # create a join message
-        join_msg = Message(
-            MessageType.JOIN, machine.ip, machine.port, machine.timestamp
-        )
+        join_msg = Message(MessageType.JOIN, machine.ip, machine.port, machine.timestamp)
 
         # send the join message to self's node server
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp_socket:
-            udp_socket.sendto(join_msg.serialize(), (self.node.host, self.node.port))
-        # self.node.process_join(join_msg, machine)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as tcp_socket:
+            tcp_socket.connect((self.node.host, self.node.port))
+            tcp_socket.send(join_msg.serialize())
