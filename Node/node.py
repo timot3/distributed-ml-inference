@@ -6,6 +6,7 @@ import threading
 import time
 from typing import List, Tuple, Dict
 
+from FileStore.FileStore import FileStore
 from .types import (
     MessageType,
     Message,
@@ -219,6 +220,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.membership_list = MembershipList([])
 
+        self.file_store = FileStore()
+
         # set the handler class
         self.RequestHandlerClass = NodeHandler
 
@@ -425,20 +428,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                     self.logger.critical(
                         in_red(f"{member} generated an exception: {exc}")
                     )
-
-        return neighbors_to_successes
-
-    def _broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
-        """
-        Broadcast a message to all neighbors
-        :param message: the message to broadcast
-        :return: a dict of neighbors and whether the message was sent successfully
-        """
-        neighbors_to_successes = {}
-        neighbors = MembershipList(self.get_neighbors())
-        for neighbor in neighbors:
-            res = self._send(message, neighbor)
-            neighbors_to_successes[neighbor] = res
 
         return neighbors_to_successes
 
