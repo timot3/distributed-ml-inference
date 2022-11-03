@@ -84,6 +84,22 @@ class NodeHandler(socketserver.DatagramRequestHandler):
                 f"{bcolors.FAIL}{'-'*10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!{bcolors.ENDC}"
             )
             self.server.rejoin()
+        
+        elif message.message_type == MessageType.ELECT_SEND:
+            # No need for a different type of message to initiate election compared to
+            # sending election messages to lower id nodes (action is exactly the same in
+            # Bully algorithm for elections)
+            # Find everyone in membership list
+            # Send to all others in membership list with lower id
+            # Wait for n seconds e.g. 5 seconds
+            # No replies - declare leader
+            pass
+        
+        elif message.message_type == MessageType.CLAIM_LEADER:
+            # Check if another node made a claim of being a leader in previous 5s
+            # If so, initiate another election.
+            # Otherwise, acknowledge sender as leader
+            pass
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
@@ -138,11 +154,13 @@ class NodeUDPServer(socketserver.UDPServer):
         self.host = host
         self.port = port
 
+        # TODO: Change to False
         self.is_introducer = is_introducer
         self.slow_mode = slow_mode
 
-        self.introducer_host = introducer_host
-        self.introducer_port = introducer_port
+        # TODO: Get rid of this!
+        # self.introducer_host = introducer_host
+        # self.introducer_port = introducer_port
 
         # initalized when the node joins the network
         self.timestamp: int = 0
@@ -159,6 +177,7 @@ class NodeUDPServer(socketserver.UDPServer):
 
         # set the handler class
         self.RequestHandlerClass = NodeHandler
+        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -173,33 +192,49 @@ class NodeUDPServer(socketserver.UDPServer):
         :return: If the connection was successful
         """
 
-        if self.introducer_socket is not None:
-            self.logger.error("Already connected to the introducer")
-            return False
-        self.introducer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # send a message to the introducer to register this node
+        # TODO
 
-        # find the ip of this machine
-        # send the ip and port of this machine to the introducer
-        ip, port = get_self_ip_and_port(self.socket)
-        self.timestamp = int(time.time())
-        self.member = Member(ip, port, self.timestamp)
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as introducer_sock:
+            ip, port = get_self_ip_and_port(self.socket)
+            while True:
+                alleged_introducer_ip = self.get_alleged_introducer_ip()
+                if not alleged_introducer_ip:
+                    time.sleep(1.0)
+                    self.logger.info("DNS Daemon returned None as IP")
+                    continue
+                
+                # TODO: Join ring implied by data (IP addr in str). This server may be incorrect, so waiting for 
+                # the correct value to quiesce is necessary (by sleeping)
+                
+                # send a message to the introducer to register this node
+                # find the ip of this machine
+                # send the ip and port of this machine to the introducer
 
-        join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
-        try:
-            self.introducer_socket.connect((self.introducer_host, self.introducer_port))
-        except OSError:
-            self.logger.error("Already connected to introducer")
-            return False
-
-        self.introducer_socket.sendall(join_message.serialize())
-        # get the response from the introducer
-        response = self.introducer_socket.recv(1024)
-        # print the response for now
-        membership_list = MembershipList.deserialize(response)
-        self.logger.info("Received membership list: {}".format(membership_list))
-        self.membership_list = membership_list
-        return True
+                self.timestamp = int(time.time())
+                self.member = Member(ip, port, self.timestamp)
+                join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
+                try:
+                    self.introducer_socket.connect((alleged_introducer_ip, LEADER_PORT))
+                except OSError:
+                    self.logger.error("Already connected to introducer")
+                
+                except:
+                    # Possibilities:
+                    # 1. Alleged introducer is not introducer
+                    # 2. Connection Failure
+                    self.logger.info("Connection to introducer failed. Retrying.")
+                    # Need to get alleged IP again as there could be an election changing 
+                    # the results
+                    time.sleep(1.0)
+                    continue
+                self.introducer_socket.sendall(join_message.serialize())
+                # get the response from the introducer
+                response = self.introducer_socket.recv(1024)
+                # print the response for now
+                membership_list = MembershipList.deserialize(response)
+                self.logger.info("Received membership list: {}".format(membership_list))
+                self.membership_list = membership_list
+                return True
 
     def rejoin(self):
         """
@@ -286,6 +321,8 @@ class NodeUDPServer(socketserver.UDPServer):
                     disconnect_message.serialize(), (member.ip, member.port)
                 )
 
+                # TODO: If leader is detected as failed, send messages to initiate elections.
+
     def start_heartbeat_watchdog(self):
         """
         This method starts the heartbeat watchdog thread
@@ -357,3 +394,31 @@ class NodeUDPServer(socketserver.UDPServer):
         except ValueError:
             self.logger.error("I am not in membership list!")
         return idx
+
+    def get_alleged_introducer_ip(self):
+        """
+        Get the alleged IP of the introducer/leader. This just gets what DNS Daemon
+        is claiming. It is not guaranteed to be correct. This is used in joining 
+        the ring. A process should double check if this is valid.
+        We have no guarantees on when the introducer will crash, 
+        so this is necessary.
+        :return: The supposed id of the introducer/leader
+        """
+        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        daemon_ip = self.dnsdaemon_ip
+        alleged_introducer_ip = None
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            print(f"dnsdaemon_ip: {daemon_ip}")
+            try:
+                # sleep(0.1)
+                sock.connect((daemon_ip, LEADER_PORT))
+                sock.sendall(b"JOIN")
+                data = sock.recv(1024)
+                print(f"Received data from server: {data}")
+                if (data.decode()):
+                    sock.sendall(b"ACK")
+                    alleged_introducer_ip = data.decode()
+
+            except:
+                print("Exception when trying to contact DNS Daemon, trying again")
+        return alleged_introducer_ip
