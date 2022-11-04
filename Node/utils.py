@@ -38,12 +38,12 @@ def is_election_message(message_type: int) -> bool:
     :param message_type: the message type
     :return: True if the message is an election message, False otherwise
     """
-    raise NotImplementedError
     # future work
-    # return (
-    #     message_type == MessageType.ELECT_SEND.value
-    #     or message_type == MessageType.CLAIM_LEADER.value
-    # )
+    return (
+        message_type == MessageType.ELECT_PING
+        or message_type == MessageType.CLAIM_LEADER_PING
+        or message_type == MessageType.CLAIM_LEADER_ACK
+    )
 
 
 def is_filestore_message(message_type: int) -> bool:
@@ -157,11 +157,12 @@ def get_message_from_bytes(data: bytes) -> Message:
     :param data: the bytes received
     :return: the Message, FileStoreMessage, or ElectionMessage
     """
-    # the first byte of the message is the message type
-    # get it with struct.unpack
 
     if len(data) == 0:
         raise ValueError("Empty message")
+
+    # the first byte of the message is the message type
+    # get it with struct.unpack
 
     message_type = struct.unpack(">I", data[:4])[0]
 

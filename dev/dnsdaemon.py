@@ -60,10 +60,9 @@ class DNSDaemon:
                     conn.sendall(b"INTRODUCER UPDATED")
                     break
                 else:
-                    print(
+                    raise ValueError(
                         f"[ERROR] Decoded data is {data.decode()} instead of 'NEW LEADER'. Exiting."
                     )
-                    exit(1)
 
     def getLeaderRoutine(self):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
@@ -110,10 +109,9 @@ class DNSDaemon:
                     conn.sendall(ackPacket)
                 return
             else:
-                print(
+                raise ValueError(
                     f"[ERROR] Decoded data is {data.decode()} instead of {desiredPacket}. Exiting."
                 )
-                exit(1)
 
 
 def _main_query_ip():
