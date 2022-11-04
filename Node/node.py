@@ -13,6 +13,8 @@ from .types import (
     Member,
     HEARTBEAT_WATCHDOG_TIMEOUT,
     bcolors,
+    DnsDaemonPortID,
+    VM1_URL
 )
 from .utils import get_self_ip_and_port, in_red, in_blue, timed_out
 
@@ -167,20 +169,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.is_introducer = is_introducer
         self.slow_mode = slow_mode
 
-        # TODO: Get rid of this!
-        # self.introducer_host = introducer_host
-        # self.introducer_port = introducer_port
-
-        # initialized when the node joins the network
+        # initalized when the node joins the network
         self.timestamp: int = 0
         self.member: Member = None
 
         self.logger = logging.getLogger("NodeServer")
         self.logger.setLevel(logging.INFO)
-
-        # create a tcp socket to connect to the introducer
-        # it will be initialized when the node joins the network
-        self.introducer_socket = None
 
         self.in_ring = False
 
@@ -209,7 +203,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         # TODO
 
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as introducer_sock:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as introducer_socket:
             ip, port = get_self_ip_and_port(self.socket)
             while True:
                 alleged_introducer_ip = self.get_alleged_introducer_ip()
@@ -229,7 +223,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 self.member = Member(ip, port, self.timestamp)
                 join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
                 try:
-                    self.introducer_socket.connect((alleged_introducer_ip, LEADER_PORT))
+                    introducer_socket.connect((alleged_introducer_ip, DnsDaemonPortID.LEADER))
                 except OSError:
                     self.logger.error("Already connected to introducer")
                 
@@ -240,11 +234,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                     self.logger.info("Connection to introducer failed. Retrying.")
                     # Need to get alleged IP again as there could be an election changing 
                     # the results
+                    # TODO: Shift this outside function?
                     time.sleep(1.0)
                     continue
-                self.introducer_socket.sendall(join_message.serialize())
+                introducer_socket.sendall(join_message.serialize())
                 # get the response from the introducer
-                response = self.introducer_socket.recv(1024)
+                response = introducer_socket.recv(1024)
                 # print the response for now
                 membership_list = MembershipList.deserialize(response)
                 self.logger.info("Received membership list: {}".format(membership_list))
@@ -258,8 +253,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :return:
         """
         self.membership_list = MembershipList([])
-        self.introducer_socket.close()
-        self.introducer_socket = None
         self.join_network()
 
     def leave_network(self) -> bool:
@@ -279,8 +272,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.membership_list = MembershipList([])
 
         # disconnect the introducer socket
-        self.introducer_socket.close()
-        self.introducer_socket = None
         self.in_ring = False
         return True
 
@@ -446,9 +437,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
     def get_alleged_introducer_ip(self):
         """
-        Get the alleged IP of the introducer/leader. This just gets what DNS Daemon
-        is claiming. It is not guaranteed to be correct. This is used in joining 
-        the ring. A process should double check if this is valid.
+        Get the alleged IP of the introducer/leader. This gets what DNS Daemon
+        is claiming. It is not guaranteed to be correct. A process should double 
+        check if this is valid.
         We have no guarantees on when the introducer will crash, 
         so this is necessary.
         :return: The supposed id of the introducer/leader
@@ -460,7 +451,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             print(f"dnsdaemon_ip: {daemon_ip}")
             try:
                 # sleep(0.1)
-                sock.connect((daemon_ip, LEADER_PORT))
+                sock.connect((daemon_ip, DnsDaemonPortID.LEADER))
                 sock.sendall(b"JOIN")
                 data = sock.recv(1024)
                 print(f"Received data from server: {data}")

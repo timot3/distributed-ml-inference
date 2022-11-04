@@ -21,6 +21,11 @@ class MessageType(IntEnum):
     CLAIM_LEADER = 6 # The sender claims to be the leader
 
 # PORT IDs
+class DnsDaemonPortID(IntEnum):
+    ELECTION = 8787
+    LEADER = 8788
+
+VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
 class bcolors:
