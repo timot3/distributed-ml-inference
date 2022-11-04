@@ -122,6 +122,7 @@ def _get_command_option() -> int:
     2 -> list_self: list self's id
     3 -> join: join the group
     4 -> leave: leave the group
+    5 -> ls: list files in the filestore
     """
     # unindent the commands using textwrap
     commands = textwrap.dedent(commands)
@@ -145,6 +146,8 @@ def _handle_command(node, command):
         node.join_network()
     elif command == 4:
         node.leave_network()
+    elif command == 5:
+        node.send_ls()
     else:
         print("Invalid command")
 
@@ -189,7 +192,9 @@ def get_message_from_bytes(data: bytes) -> Message:
         # future work
         # return ElectionMessage.deserialize(data)
     else:
-        raise ValueError("Invalid message type")
+        return LSMessage.deserialize(data)
+
+        # raise ValueError("Invalid message type")
 
 
 # Useful for displaying/debugging purposes, not used for functionality

@@ -218,7 +218,6 @@ class LSMessage(Message):
         base_message = super().serialize()
         # serialize the files
         ls_files = b",".join(file.ls_serialize() for file in self.files)
-
         return base_message + ls_files
 
     @classmethod

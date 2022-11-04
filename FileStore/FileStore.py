@@ -45,8 +45,13 @@ class File:
     @classmethod
     def ls_deserialize(cls, data: bytes):
         # use struct.unpack to unpack the data from bytes
-        data = data.decode("utf-8")
-        name, version, size = data.split(":")
+        name, version, size = data.split(b":")
+        name = struct.unpack(">32s", name)[0].decode("utf-8")
+        # the next 4 bytes are the version
+        version = struct.unpack(">I", version)[0]
+        # the next 4 bytes are the size of the file
+        size = struct.unpack(">I", size)[0]
+
         return cls(name, b"", filesize=int(size), version=int(version))
 
 
