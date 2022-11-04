@@ -116,7 +116,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
             # send the membership list to the node via the tcp socket
             self.request.sendall(add_len_prefix(membership_list_msg.serialize()))
-
+            # convert message to a join message
+            message.message_type = MessageType.JOIN
             self._process_join(message, new_member_machine)
             print(self.server.membership_list)
 
