@@ -177,3 +177,12 @@ def get_message_from_bytes(data: bytes) -> Message:
         # return ElectionMessage.deserialize(data)
     else:
         raise ValueError("Invalid message type")
+
+
+# Useful for displaying/debugging purposes, not used for functionality
+ip_url_dict = {
+    socket.gethostbyname(
+        f"fa22-cs425-25{i:02}.cs.illinois.edu"
+    ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
+    for i in range(1, 10)
+}

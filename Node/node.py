@@ -15,6 +15,8 @@ from .types import (
     HEARTBEAT_WATCHDOG_TIMEOUT,
     BUFF_SIZE,
     bcolors,
+    DnsDaemonPortID,
+    VM1_URL,
     FileStoreMessage,
     MembershipListMessage,
 )
@@ -167,6 +169,25 @@ class NodeHandler(socketserver.BaseRequestHandler):
             time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
             self.server.rejoin()
 
+        elif message.message_type == MessageType.ELECT_PING:
+            # No need for a different type of message to initiate election compared to
+            # sending election messages to lower id nodes (action is exactly the same in
+            # Bully algorithm for elections)
+            # Find everyone in membership list
+            # Send to all others in membership list with lower id
+            # Wait for n seconds e.g. 5 seconds
+            # No replies - declare leader
+            pass
+
+        elif message.message_type == MessageType.CLAIM_LEADER_ACK:
+            pass
+
+        elif message.message_type == MessageType.CLAIM_LEADER_PING:
+            # Check if another node made a claim of being a leader in previous 5s
+            # If so, initiate another election.
+            # Otherwise, acknowledge sender as leader
+            pass
+
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
             self.server.logger.info(f"Received PUT request for {message.file_name}")
@@ -268,6 +289,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self,
         host,
         port,
+        introducer_host,
+        introducer_port,
         is_introducer=False,
         slow_mode=False,
     ):
@@ -293,6 +316,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.logger = logging.getLogger("NodeServer")
         self.logger.setLevel(logging.INFO)
 
+        # create a tcp socket to connect to the introducer
+        # it will be initialized when the node joins the network
+        self.introducer_socket = None
+
         self.in_ring = False
 
         self.membership_list = MembershipList([])
@@ -301,6 +328,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         # set the handler class
         self.RequestHandlerClass = NodeHandler
+        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -475,6 +503,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                     )
                     self.broadcast_to_neighbors(leave_message)
 
+                # TODO: If leader is detected as failed, send messages to initiate elections.
+
     def start_heartbeat_watchdog(self):
         """
         This method starts the heartbeat watchdog thread
@@ -578,3 +608,31 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         except ValueError:
             self.logger.error("I am not in membership list!")
         return idx
+
+    def get_alleged_introducer_ip(self):
+        """
+        Get the alleged IP of the introducer/leader. This gets what DNS Daemon
+        is claiming. It is not guaranteed to be correct. A process should double
+        check if this is valid.
+        We have no guarantees on when the introducer will crash,
+        so this is necessary.
+        :return: The supposed id of the introducer/leader
+        """
+        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        daemon_ip = self.dnsdaemon_ip
+        alleged_introducer_ip = None
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            print(f"dnsdaemon_ip: {daemon_ip}")
+            try:
+                # sleep(0.1)
+                sock.connect((daemon_ip, DnsDaemonPortID.LEADER))
+                sock.sendall(b"JOIN")
+                data = sock.recv(1024)
+                print(f"Received data from server: {data}")
+                if data.decode():
+                    sock.sendall(b"ACK")
+                    alleged_introducer_ip = data.decode()
+
+            except:
+                print("Exception when trying to contact DNS Daemon, trying again")
+        return alleged_introducer_ip

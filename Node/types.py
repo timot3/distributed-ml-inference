@@ -15,6 +15,8 @@ BUFF_SIZE = 4096
 INTRODUCER_HOST = "localhost"
 INTRODUCER_PORT = 8080
 
+ELECT_LEADER_TIMEOUT = 3
+
 
 class MessageType(IntEnum):
     # Communication messages
@@ -26,17 +28,30 @@ class MessageType(IntEnum):
 
     # Election messages
     # todo @zhuxuan: add election messages
+    ELECT_PING = 6  # send to all nodes that are lower in id
+    CLAIM_LEADER_PING = 8  # The sender claims to be the leader
+    CLAIM_LEADER_ACK = 7
 
     # FileStore messages
-    PUT = 8
-    GET = 9
-    DELETE = 10
-    FILE_ACK = 11
+    PUT = 9
+    GET = 10
+    DELETE = 11
+    FILE_ACK = 12
 
     # Membership messages
-    NEW_NODE = 12
-    MEMBERSHIP_LIST = 13
+    NEW_NODE = 13
+    MEMBERSHIP_LIST = 14
 
+
+# PORT IDs
+class DnsDaemonPortID(IntEnum):
+    ELECTION = 8787
+    LEADER = 8788
+
+
+INTRODUCER_PORT = 8789
+
+VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
 class bcolors:
