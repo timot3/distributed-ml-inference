@@ -3,7 +3,7 @@ import threading
 import logging
 
 from Node.node import NodeTCPServer
-from Node.utils import run_node_command_menu
+from Node.utils import in_green, run_node_command_menu
 
 if __name__ == "__main__":
     # set logging config
@@ -29,5 +29,7 @@ if __name__ == "__main__":
 
         thread = threading.Thread(target=introducer.serve_forever, daemon=True)
         thread.start()
+
+        print(in_green(f"Node running on {HOST}:{PORT}"))
 
         run_node_command_menu(introducer)

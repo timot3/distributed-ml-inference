@@ -122,7 +122,9 @@ def _get_command_option() -> int:
     2 -> list_self: list self's id
     3 -> join: join the group
     4 -> leave: leave the group
-    5 -> ls: list files in the filestore
+    5 -> ls all: list files in the filestore
+    6 -> ls <file>: list specific files in filestore
+    7 -> store: List the files currently stored in this node's filestore
     """
     # unindent the commands using textwrap
     commands = textwrap.dedent(commands)
@@ -148,6 +150,13 @@ def _handle_command(node, command):
         node.leave_network()
     elif command == 5:
         node.send_ls()
+    elif command == 6:
+        raise NotImplementedError
+    elif command == 7:
+        file_store = node.get_file_store()
+        filenames = file_store.get_file_names()
+        print(bcolors.OKBLUE + ",".join(filenames) + bcolors.ENDC)
+
     else:
         print("Invalid command")
 

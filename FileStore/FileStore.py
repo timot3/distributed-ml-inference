@@ -73,13 +73,19 @@ class FileStore:
     def __init__(self):
         self.file_map = {}
 
-    def put_file(self, file_name, file_content):
+    def put_file(self, file_name: str, file_content: bytes):
         """
         Add a file to the file store
         """
         if file_name not in self.file_map:
             self.file_map[file_name] = []
-        self.file_map[file_name].append(File(file_name, file_content))
+
+        # increment the version number by 1
+        file_version = self.get_file_version(file_name) + 1
+        print(file_version)
+        self.file_map[file_name].append(
+            File(file_name, file_content, version=file_version)
+        )
 
     def get_file(self, file_name):
         """
@@ -91,13 +97,14 @@ class FileStore:
         # get the latest version of the file
         return self.file_map[file_name][-1]
 
-    def get_file_version(self, file_name) -> File:
+    def get_file_version(self, file_name) -> int:
         """
         Get the version of a file
         """
-        if file_name not in self.file_map:
-            return None
-        return self.file_map[file_name][-1].file_version
+        if file_name not in self.file_map or len(self.file_map[file_name]) == 0:
+            return -1  # file does not exist
+
+        return self.file_map[file_name][-1].version
 
     def get_file_versions(self, file_name, num_versions) -> List[File]:
         """
@@ -129,3 +136,10 @@ class FileStore:
         :return: A list of the latest version of all files
         """
         return [self.file_map[file_name][-1] for file_name in self.file_map]
+
+    def get_file_names(self) -> List[str]:
+        """
+        Get a list of all the file names
+        :return: A list of all the file names
+        """
+        return list(self.file_map.keys())

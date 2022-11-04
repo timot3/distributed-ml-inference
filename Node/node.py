@@ -305,7 +305,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 in_red("Failed to send message to member {}: {}".format(member, e))
             )
             # print the stack trace
-            traceback.print_exc()
             return None
 
     def broadcast_to(
@@ -317,7 +316,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :return: a dict of neighbors and whether the message was sent successfully
         """
         member_to_response = {}
-        members = MembershipList(self.get_neighbors())
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
@@ -365,6 +363,13 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         for member, message in res.items():
             files_str = ", ".join(str(file) for file in message.files)
             print(f"{member}: {files_str}")
+
+    def get_file_store(self) -> FileStore:
+        """
+        Get the local files
+        :return: a list of files
+        """
+        return self.file_store
 
     def get_membership_list(self) -> MembershipList:
         """

@@ -103,9 +103,14 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 # send the file to the nodes
                 # first, check if self.server.member in nodes_to_store
                 # if so, store the file locally
+                num_successes = 0
+
                 if self.server.member in nodes_to_store:
+                    self.server.logger.info("Storing file locally")
                     self.server.file_store.put_file(message.file_name, message.data)
                     nodes_to_store.remove(self.server.member)
+                    replication_factor -= 1
+                    num_successes += 1
 
                 # send the file to the nodes
                 results: dict = self.server.broadcast_to(message, nodes_to_store)
@@ -134,13 +139,15 @@ class NodeHandler(socketserver.BaseRequestHandler):
                             chosen_node_cnt -= 1
 
             # send a response to the client
+            # get the file that was inserted
+            new_file = self.server.file_store.get_file(message.file_name)
             client_ack_message = FileMessage(
                 MessageType.FILE_ACK,
                 self.server.host,
                 self.server.port,
                 self.server.timestamp,
-                message.file_name,
-                message.version,
+                new_file.file_name,
+                new_file.version,
                 b"",  # no data -- this is an ack
             )
 
@@ -173,16 +180,17 @@ class NodeHandler(socketserver.BaseRequestHandler):
         :param message: The received message
         :return: None
         """
-        dummy_file = File("dummy", b"dummy", version=1)
-
         # reply with everything in the filestore
+        files = self.server.file_store.get_latest_versions()
+
         file_list_message = LSMessage(
             MessageType.LS,
             self.server.host,
             self.server.port,
             self.server.timestamp,
-            [dummy_file],
+            files,
         )
+
         self.server.logger.info(f"Replying with {file_list_message}")
         self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
@@ -223,7 +231,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # convert message to a join message
             message.message_type = MessageType.JOIN
             self._process_join(message, new_member_machine)
-            print(self.server.membership_list)
 
         # handle JOIN
         elif message.message_type == MessageType.JOIN:

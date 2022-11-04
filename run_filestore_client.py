@@ -43,10 +43,10 @@ def make_file_message(
 
 if __name__ == "__main__":
     # get this value from he command line when starting the introducer
-    HOST, PORT = "127.0.0.1", 8081
+    HOST, PORT = "127.0.0.1", 8080
 
     # get data from testfiles/letters.txt
-    with open("testfiles/letters.txt", "rb") as f:
+    with open("testfiles/numbers.txt", "rb") as f:
         file_data = f.readline()
 
     # create a filestore message

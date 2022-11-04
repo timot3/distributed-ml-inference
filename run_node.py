@@ -1,7 +1,7 @@
 import threading
 
 from Node.node import NodeTCPServer
-from Node.utils import get_any_open_port, run_node_command_menu
+from Node.utils import get_any_open_port, in_green, run_node_command_menu
 import logging
 
 if __name__ == "__main__":
@@ -27,5 +27,6 @@ if __name__ == "__main__":
         node.join_network()
         thread = threading.Thread(target=node.serve_forever, daemon=True)
         thread.start()
+        print(in_green(f"Node running on {HOST}:{PORT}"))
 
         run_node_command_menu(node)
