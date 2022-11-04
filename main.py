@@ -95,7 +95,10 @@ if __name__ == "__main__":
         "-r", "--remote", action="store_true", help="Start nodes on remote machines"
     )
     parser.add_argument(
-        "-s", "--separate", action="store_true", help="Start nodes in separate terminals",
+        "-s",
+        "--separate",
+        action="store_true",
+        help="Start nodes in separate terminals",
     )
     parser.add_argument(
         "-p", "--port", type=int, default=8080, help="Port to start introducer on"

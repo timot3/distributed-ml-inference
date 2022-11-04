@@ -1,8 +1,8 @@
 import threading
 
-from Node.introducer import IntroducerServer
 import logging
 
+from Node.node import NodeTCPServer
 from Node.utils import run_node_command_menu
 
 if __name__ == "__main__":
@@ -21,12 +21,13 @@ if __name__ == "__main__":
 
     HOST, PORT = "127.0.0.1", 8080
     # create  a tcp server that reuses the address
-    with IntroducerServer(HOST, PORT) as server:
-        server.allow_reuse_address = True
-        server.server_bind()
-        server.server_activate()
-        server.start_node_server_thread()
-        server_thread = threading.Thread(target=server.serve_forever, daemon=True)
-        server_thread.start()
-        server.node.start_heartbeat_watchdog()
-        run_node_command_menu(server.node)
+    with NodeTCPServer(HOST, PORT, is_introducer=True) as introducer:
+        introducer.allow_reuse_address = True
+        introducer.server_bind()
+        introducer.server_activate()
+        introducer.join_network()
+
+        thread = threading.Thread(target=introducer.serve_forever, daemon=True)
+        thread.start()
+
+        run_node_command_menu(introducer)

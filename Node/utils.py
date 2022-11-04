@@ -2,8 +2,62 @@ import socket
 import struct
 import textwrap
 import time
+from typing import Tuple
 
-from Node.types import bcolors
+from Node.types import (
+    bcolors,
+    MessageType,
+    Message,
+    FileStoreMessage,
+    MembershipListMessage,
+)
+
+
+def is_membership_message(message_type: int) -> bool:
+    return message_type == MessageType.MEMBERSHIP_LIST
+
+
+def is_communication_message(message_type: int) -> bool:
+    """
+    Checks if the message is a communication message
+    :param message_type: the message type
+    :return: True if the message is a communication message, False otherwise
+    """
+    return (
+        message_type == MessageType.NEW_NODE
+        or message_type == MessageType.JOIN
+        or message_type == MessageType.LEAVE
+        or message_type == MessageType.PING
+        or message_type == MessageType.PONG
+    )
+
+
+def is_election_message(message_type: int) -> bool:
+    """
+    Checks if the message is an election message
+    :param message_type: the message type
+    :return: True if the message is an election message, False otherwise
+    """
+    raise NotImplementedError
+    # future work
+    # return (
+    #     message_type == MessageType.ELECT_SEND.value
+    #     or message_type == MessageType.CLAIM_LEADER.value
+    # )
+
+
+def is_filestore_message(message_type: int) -> bool:
+    """
+    Checks if the message is a filestore message
+    :param message_type: the message type
+    :return: True if the message is a filestore message, False otherwise
+    """
+    return (
+        message_type == MessageType.PUT
+        or message_type == MessageType.GET
+        or message_type == MessageType.DELETE
+        or message_type == MessageType.FILE_ACK
+    )
 
 
 def in_red(text):
@@ -16,6 +70,17 @@ def in_green(text):
 
 def in_blue(text):
     return bcolors.OKBLUE + text + bcolors.ENDC
+
+
+def add_len_prefix(message: bytes) -> bytes:
+    msg = struct.pack(">I", len(message)) + message
+    return msg
+
+
+def trim_len_prefix(message: bytes) -> Tuple[int, bytes]:
+    msg_len = struct.unpack(">I", message[:4])[0]
+    msg = message[4 : 4 + msg_len]
+    return msg_len, msg
 
 
 def get_self_ip_and_port(sock):
@@ -82,3 +147,33 @@ def run_node_command_menu(node):
 
 def timed_out(timestamp, timeout):
     return time.time() - timestamp > timeout
+
+
+def get_message_from_bytes(data: bytes) -> Message:
+    """
+    Factory method to get either a Message, FileStoreMessage, or ElectionMessage
+    from a byte array.
+
+    :param data: the bytes received
+    :return: the Message, FileStoreMessage, or ElectionMessage
+    """
+    # the first byte of the message is the message type
+    # get it with struct.unpack
+
+    if len(data) == 0:
+        raise ValueError("Empty message")
+
+    message_type = struct.unpack(">I", data[:4])[0]
+
+    if is_communication_message(message_type):
+        return Message.deserialize(data)
+    elif is_filestore_message(message_type):
+        return FileStoreMessage.deserialize(data)
+    elif is_membership_message(message_type):
+        return MembershipListMessage.deserialize(data)
+    elif is_election_message(message_type):
+        raise NotImplementedError
+        # future work
+        # return ElectionMessage.deserialize(data)
+    else:
+        raise ValueError("Invalid message type")

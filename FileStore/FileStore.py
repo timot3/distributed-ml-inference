@@ -1,22 +1,6 @@
-import threading
+from typing import List
 
-
-class ShardedFile:
-    """
-    Class to represent a chunk of a file
-    Chunks are stored across nodes in the network
-    """
-
-    def __init__(self, chunk_id=None, data=None):
-        self.chunk_id = chunk_id
-        self.data = data
-
-    def serialize(self):
-        return self.data
-
-    @classmethod
-    def deserialize(cls, data):
-        return cls(data=data)
+from FileStore.types import MAX_NUM_VERSIONS
 
 
 class File:
@@ -24,10 +8,9 @@ class File:
     Class to represent a file
     """
 
-    def __init__(self, file_name, file_content):
+    def __init__(self, file_name: str, file_content: bytes):
         self.file_name = file_name
         self.file_content = file_content
-        self.file_version = 0
 
     def serialize(self):
         return self.file_content
@@ -42,7 +25,7 @@ class FileStore:
     def __init__(self):
         self.file_map = {}
 
-    def add_file(self, file_name, file_content):
+    def put_file(self, file_name, file_content):
         """
         Add a file to the file store
         """
@@ -56,12 +39,38 @@ class FileStore:
         """
         if file_name not in self.file_map:
             return None
+
+        # get the latest version of the file
         return self.file_map[file_name][-1]
 
-    def get_file_version(self, file_name):
+    def get_file_version(self, file_name) -> File:
         """
         Get the version of a file
         """
         if file_name not in self.file_map:
             return None
         return self.file_map[file_name][-1].file_version
+
+    def get_file_versions(self, file_name, num_versions) -> List[File]:
+        """
+        Get the last num_versions vesions of the file
+        :param file_name: The file name to get
+        :param num_versions: The number of versions to get
+        :return: A list of (up to) the last 5 versions of the file
+        """
+        if file_name not in self.file_map:
+            return []
+        # cap the number of versions at MAX_NUM_VERSIONS
+        if num_versions > MAX_NUM_VERSIONS:
+            num_versions = MAX_NUM_VERSIONS
+        return self.file_map[file_name][-num_versions:]
+
+    def delete_file(self, file_name) -> List[File]:
+        """
+        Delete a file from the file store
+        :param file_name: The file name to delete
+        :return: A list of the versions of the file that were deleted
+        """
+        if file_name not in self.file_map:
+            return []
+        return self.file_map.pop(file_name)
