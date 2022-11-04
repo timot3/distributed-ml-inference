@@ -4,13 +4,14 @@ import socketserver
 import socket
 import threading
 import time
-from typing import List, Tuple, Dict
+from typing import List, Optional, Tuple, Dict
 
 import random
 
 from FileStore.FileStore import FileStore
 from .types import (
     REPLICATION_LEVEL,
+    LSMessage,
     MessageType,
     Message,
     MembershipList,
@@ -181,8 +182,16 @@ class NodeHandler(socketserver.BaseRequestHandler):
         :return: None
         """
         # reply with everything in the filestore
-
-        pass
+        file_list = self.server.file_store.get_file_list()
+        file_list_message = LSMessage(
+            MessageType.LS,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            file_list,
+        )
+        self.server.logger.info(f"Replying with {file_list_message}")
+        self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
     def _process_message(self, message) -> None:
         """
@@ -306,6 +315,9 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # construct member from message
             ack_member = Member(message.ip, message.port, message.timestamp)
             self.server.logger.info(f"Received FILE_ACK from {ack_member}")
+
+        elif message.message_type == MessageType.LS:
+            self._process_ls(message)
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
@@ -588,7 +600,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
-    def _send(self, msg: Message, member: Member) -> bool:
+    def _send(self, msg: Message, member: Member, recv=False) -> Optional[Message] | bool:
         """
         Send a message to a member
         :param msg: The message to send
@@ -601,41 +613,46 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 s.connect((member.ip, member.port))
                 msg = add_len_prefix(msg.serialize())
                 s.sendall(msg)
+                if recv:
+                    data = s.recv(BUFF_SIZE)
+                    return get_message_from_bytes(data)
+                else:
+                    return True
         except Exception as e:
             self.logger.error(
                 in_red("Failed to send message to member {}: {}".format(member, e))
             )
-            return False
+            return None
 
-        return True
-
-    def broadcast_to(self, message: Message, who: List[Member]) -> Dict[Member, bool]:
+    def broadcast_to(
+        self, message: Message, members: List[Member], recv=False
+    ) -> Dict[Member, bool]:
         """
-        Broadcast a message to all `who`
+        Broadcast a message to all `members`
         :param message: the message to broadcast
         :return: a dict of neighbors and whether the message was sent successfully
         """
-        who_to_successes = {}
-        who = MembershipList(self.get_neighbors())
+        member_to_response = {}
+        members = MembershipList(self.get_neighbors())
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
-                executor.submit(self._send, message, neighbor): neighbor
-                for neighbor in who
+                executor.submit(self._send, message, neighbor, recv=recv): neighbor
+                for neighbor in members
             }
             for future in concurrent.futures.as_completed(future_to_member):
                 member = future_to_member[future]
                 try:
                     data = future.result()
-                    who_to_successes[member] = data
+                    member_to_response[member] = data
                     self.logger.debug(f"Sent message to {member}")
                 except Exception as exc:
                     self.logger.critical(
                         in_red(f"{member} generated an exception: {exc}")
                     )
 
-        return who_to_successes
+        return member_to_response
 
     def broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
         """

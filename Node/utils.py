@@ -5,6 +5,7 @@ import time
 from typing import Tuple
 
 from Node.types import (
+    LSMessage,
     bcolors,
     MessageType,
     Message,
@@ -58,6 +59,15 @@ def is_filestore_message(message_type: int) -> bool:
         or message_type == MessageType.DELETE
         or message_type == MessageType.FILE_ACK
     )
+
+
+def is_ls_message(message_type: int) -> bool:
+    """
+    Checks if the message is a ls message
+    :param message_type: the message type
+    :return: True if the message is a ls message, False otherwise
+    """
+    return message_type == MessageType.LS
 
 
 def in_red(text):
@@ -170,6 +180,8 @@ def get_message_from_bytes(data: bytes) -> Message:
         return Message.deserialize(data)
     elif is_filestore_message(message_type):
         return FileMessage.deserialize(data)
+    elif is_ls_message(message_type):
+        return LSMessage.deserialize(data)
     elif is_membership_message(message_type):
         return MembershipListMessage.deserialize(data)
     elif is_election_message(message_type):
