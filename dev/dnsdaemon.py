@@ -6,14 +6,7 @@ import logging
 from time import sleep
 
 from Node.types import DnsDaemonPortID, VM1_URL
-
-# Useful for displaying/debugging purposes, not used for functionality
-ip_url_dict = {
-    socket.gethostbyname(
-        f"fa22-cs425-25{i:02}.cs.illinois.edu"
-    ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
-    for i in range(1, 10)
-}
+from Node.utils import ip_url_dict
 
 """
 The class can return a dead leader, so nodes checking for the leader still 
@@ -30,11 +23,11 @@ class DNSDaemon:
 
     def __init__(self) -> None:
         # TODO: Integrate with Node logic for elections
-        # self.electionThread = threading.Thread(target=self.electionRoutine, daemon=True)
+        self.electionThread = threading.Thread(target=self.electionRoutine, daemon=True)
         self.processJoinThread = threading.Thread(
             target=self.getLeaderRoutine, daemon=True
         )
-        # self.electionThread.start()
+        self.electionThread.start()
         self.processJoinThread.start()
         print("Created 2 special threads!")
 
@@ -45,7 +38,9 @@ class DNSDaemon:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
             sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
             sock.bind((self.introducer_ip, DnsDaemonPortID.ELECTION))
-            print(f"Election socket binded to election port {DnsDaemonPortID.ELECTION} !")
+            print(
+                f"Election socket binded to election port {DnsDaemonPortID.ELECTION} !"
+            )
             while True:
                 self.electionRoutine_inner(sock)
 
@@ -54,7 +49,8 @@ class DNSDaemon:
         sock.listen()
         conn, addr = sock.accept()
         with conn:
-            print(f"Connected by {addr}, corresponding to URL {ip_url_dict[addr]}")
+            # Enable only if using VM
+            # print(f"Connected by {addr}, corresponding to URL {ip_url_dict[addr]}")
             while True:
                 data = conn.recv(1024)
                 print(f"Server received data: {data}")
@@ -62,7 +58,7 @@ class DNSDaemon:
                     break
                 # TODO: if data says new leader announced:
                 if data.decode() == "NEW LEADER":
-                    self.update_introducer(str(addr[0]))
+                    self.update_introducer(addr)
                     conn.sendall(b"INTRODUCER UPDATED")
                     break
                 else:
@@ -93,15 +89,14 @@ class DNSDaemon:
         with self.lock:
             return self.getIntroducerIPSerialized()
 
-    def update_introducer(self, new_introducer_addr: int):
+    def update_introducer(self, addr):
         with self.lock:
-            self.introducer_ip = new_introducer_addr
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_out:
-                sock_out.connect((new_introducer_addr, DnsDaemonPortID.LEADER))
-                sock_out.sendall(b"ACK")
-                print(
-                    f"Introducer updated to {self.introducer_ip}, corresponding to address {ip_url_dict}"
-                )
+            self.introducer_ip = str(addr[0])
+            # Enable only if using VM
+            # print(
+            # f"Introducer updated to {self.introducer_ip}, corresponding to address {ip_url_dict}"
+            # )
+            print(f"Introducer updated to {self.introducer_ip} ")
             # release lock
 
     def handleOneJoinPacket(self, conn, desiredPacket, ackPacket=None):
@@ -123,7 +118,7 @@ class DNSDaemon:
                 exit(1)
 
 
-def _main():
+def _main_query_ip():
     translator = DNSDaemon()
 
     daemon_ip = socket.gethostbyname(VM1_URL)
@@ -151,5 +146,37 @@ def _main():
     return
 
 
+def _main_update_ip():
+    translator = DNSDaemon()
+    daemon_ip = socket.gethostbyname(VM1_URL)
+    daemon_ip = "127.0.0.1"
+    for i in range(100):
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_elect:
+            sock_elect.connect((daemon_ip, DnsDaemonPortID.ELECTION))
+            sock_elect.sendall(b"NEW LEADER")
+            data = sock_elect.recv(1024)
+            print(f"Received data from server: {data}")
+            if data.decode() == "INTRODUCER UPDATED":
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock_query:
+                    while True:
+                        try:
+                            sock_query.connect((daemon_ip, DnsDaemonPortID.LEADER))
+                            sock_query.sendall(b"JOIN")
+                            data = sock_query.recv(1024)
+                            print(f"Received leader IP from server: {data}")
+                            if data.decode():
+                                sock_query.sendall(b"ACK")
+                            break
+
+                        except:
+                            print("Exception when trying to join, trying again")
+                            sleep(1.0)
+
+            else:
+                print(f"Received data is bad!")
+                exit(1)
+
+
 if __name__ == "__main__":
-    _main()
+    # _main_query_ip()
+    _main_update_ip()

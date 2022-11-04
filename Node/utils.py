@@ -82,3 +82,12 @@ def run_node_command_menu(node):
 
 def timed_out(timestamp, timeout):
     return time.time() - timestamp > timeout
+
+
+# Useful for displaying/debugging purposes, not used for functionality
+ip_url_dict = {
+    socket.gethostbyname(
+        f"fa22-cs425-25{i:02}.cs.illinois.edu"
+    ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
+    for i in range(1, 10)
+}

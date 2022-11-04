@@ -9,7 +9,7 @@ lock = Lock()
 
 # timeout duration of heartbeat
 HEARTBEAT_WATCHDOG_TIMEOUT = 5
-
+ELECT_LEADER_TIMEOUT = 3
 
 class MessageType(IntEnum):
     JOIN = 0
@@ -17,13 +17,17 @@ class MessageType(IntEnum):
     PING = 2
     PONG = 3
     DISCONNECTED = 4  # sent to node that is disconnected
-    ELECT_SEND = 5 # send to all nodes that are lower in id
-    CLAIM_LEADER = 6 # The sender claims to be the leader
+    ELECT_PING = 5 # send to all nodes that are lower in id
+    ELECT_ACK = 15 
+    CLAIM_LEADER_PING = 6 # The sender claims to be the leader
+
 
 # PORT IDs
 class DnsDaemonPortID(IntEnum):
     ELECTION = 8787
     LEADER = 8788
+
+INTRODUCER_PORT = 8789
 
 VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
 
