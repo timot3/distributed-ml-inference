@@ -237,6 +237,10 @@ class LSMessage(Message):
 
         return cls(message_type, ip, port, timestamp, files)
 
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"LSMessage({msg_type}, files={self.files})"
+
 
 class Member:
     def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = None):

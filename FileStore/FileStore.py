@@ -54,6 +54,15 @@ class File:
 
         return cls(name, b"", filesize=int(size), version=int(version))
 
+    def __str__(self):
+        text = (
+            f"FileName: {self.file_name}, Version: {self.version}, Size: {self.file_size}"
+        )
+        if len(self.file_content) > 0:
+            # add the first 10 bytes
+            text += f", Content: {self.file_content[:10]}"
+        return text
+
 
 class FileStore:
     """

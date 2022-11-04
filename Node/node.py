@@ -362,7 +362,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
         )
         res = self.broadcast_to(ls_message, self.membership_list, recv=True)
-        print(res)
+        for member, message in res.items():
+            files_str = ", ".join(str(file) for file in message.files)
+            print(f"{member}: {files_str}")
 
     def get_membership_list(self) -> MembershipList:
         """
