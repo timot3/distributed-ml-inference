@@ -138,20 +138,53 @@ class NodeHandler(socketserver.BaseRequestHandler):
             self.server.file_store.put_file(message.file_name, message.data)
             # reply with FILE_ACK
 
-            ack_message = FileStoreMessage(
-                MessageType.FILE_ACK,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                message.file_name,
-                message.version,
-                message.data,
-            )
-            self.server.logger.info(f"Replying with {ack_message}")
-            # reply to the sender (the client)
-            # TODO: adapt this to reply to a server
-            # TODO add length prefix
-            self.request.sendall(add_len_prefix(ack_message.serialize()))
+            # if this node is the introducer, broadcast the received message to all other nodes
+            # but, since we want the nodes to ack to the introducer, not the client, we need to
+            # change the ip and port to the introducer's
+
+            # TODO: @Zhuxuan:
+            # This is where we broadcast to either the leader, or the other nodes.
+            # The leader is determined, currently, only in the join_network function.
+            # We need to change this to be determined by the leader election algorithm.
+
+            if self.server.is_introducer:
+
+                message.ip = self.server.host
+                message.port = self.server.port
+                message.timestamp = self.server.timestamp
+                self.server.logger.info(
+                    "I am the leader. Broadcasting PUT request to neighbors!"
+                )
+                self.server.broadcast_to_neighbors(message)
+
+                # reply to the sender (the client)
+                client_ack_message = FileStoreMessage(
+                    MessageType.FILE_ACK,
+                    self.server.host,
+                    self.server.port,
+                    self.server.timestamp,
+                    message.file_name,
+                    message.version,
+                    b"",  # no data -- this is an ack
+                )
+                self.server.logger.info(f"Replying with {client_ack_message}")
+                self.request.sendall(add_len_prefix(client_ack_message.serialize()))
+
+            else:
+                # ack to the introducer
+                self.server.logger.info("I am not the leader. Acking to leader!")
+                print(f"{message}")
+                self_ack_message = FileStoreMessage(
+                    MessageType.FILE_ACK,
+                    self.server.host,
+                    self.server.port,
+                    self.server.timestamp,
+                    message.file_name,
+                    message.version,
+                    b"",  # no data -- this is an ack
+                )
+                addr = (self.server.leader_host, self.server.leader_port)
+                self._send(self_ack_message, addr)
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
@@ -160,6 +193,11 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # handle DELETE for file store
         elif message.message_type == MessageType.DELETE:
             raise NotImplementedError
+
+        elif message.message_type == MessageType.FILE_ACK:
+            # construct member from message
+            ack_member = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(f"Received FILE_ACK from {ack_member}")
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
@@ -211,7 +249,11 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.introducer_host = introducer_host
         self.introducer_port = introducer_port
 
-        # initialized when the node joins the network
+        # initialized when the node joins the ring
+        self.leader_host = None
+        self.leader_port = None
+
+        # initialized when the node joins the ring
         self.timestamp: int = 0
         self.member: Member = None
 
@@ -275,6 +317,11 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.logger.info("Received membership list: {}".format(membership_list))
         self.membership_list = membership_list
         self.in_ring = True
+
+        # set the leader
+        self.leader_host = self.membership_list[0].ip
+        self.leader_port = self.membership_list[0].port
+
         return True
 
     def rejoin(self):

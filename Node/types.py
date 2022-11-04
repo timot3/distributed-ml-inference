@@ -146,7 +146,6 @@ class FileStoreMessage(Message):
         base_size = communication_struct.size
 
         min_size = base_size + 36
-        print(len(data))
         if len(data) < min_size:
             raise ValueError("Invalid message")
 

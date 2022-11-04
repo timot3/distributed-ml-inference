@@ -60,9 +60,11 @@ class IntroducerServer(socketserver.TCPServer):
         self.logger = logging.getLogger("IntroducerServer")
         self.logger.setLevel(logging.DEBUG)
 
-        open_port = get_any_open_port()
+        introducer_node_port = 8081
 
-        self.node = NodeTCPServer(host, open_port, host, port)
+        self.node = NodeTCPServer(
+            host, introducer_node_port, host, port, is_introducer=True
+        )
 
     def _start_node_server(self):
         with self.node:

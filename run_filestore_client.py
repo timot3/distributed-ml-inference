@@ -43,7 +43,7 @@ def make_file_message(
 
 if __name__ == "__main__":
     # get this value from he command line when starting the introducer
-    HOST, PORT = "127.0.0.1", 56845
+    HOST, PORT = "127.0.0.1", 8081
 
     # get data from testfiles/letters.txt
     with open("testfiles/letters.txt", "rb") as f:
