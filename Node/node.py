@@ -6,8 +6,11 @@ import threading
 import time
 from typing import List, Tuple, Dict
 
+import random
+
 from FileStore.FileStore import FileStore
 from .types import (
+    REPLICATION_LEVEL,
     MessageType,
     Message,
     MembershipList,
@@ -22,6 +25,7 @@ from .types import (
 )
 from .utils import (
     add_len_prefix,
+    get_replication_level,
     get_self_ip_and_port,
     in_red,
     in_blue,
@@ -82,6 +86,101 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # add the member after broadcasting
         # in order to not include the member in neighbors
         self.server.add_new_member(new_member)
+
+    def _process_put(self, message: FileStoreMessage) -> None:
+        """
+        Process a PUT message and store the file
+        :param message: The received message
+        :return: None
+        """
+
+        if self.server.is_introducer:
+            # choose REPLICATION_LEVEL nodese
+            # store the file on those nodes
+            membership_list_size = len(self.server.membership_list)
+            replication_factor = get_replication_level(
+                membership_list_size, REPLICATION_LEVEL
+            )
+            nodes_to_store = random.sample(
+                self.server.membership_list, replication_factor
+            )
+            tried_nodes = []
+
+            while replication_factor > 0:
+                # send the file to the nodes
+                # first, check if self.server.member in nodes_to_store
+                # if so, store the file locally
+                if self.server.member in nodes_to_store:
+                    self.server.file_store.put_file(message.file_name, message.data)
+                    nodes_to_store.remove(self.server.member)
+
+                # send the file to the nodes
+                results: dict = self.server.broadcast_to(message, nodes_to_store)
+                # count the number of failures
+                num_successes = list(results.values()).count(True)
+                replication_factor -= num_successes
+
+                if replication_factor > 0:
+                    self.server.logger.warning(
+                        f"Failed to store file on {replication_factor} nodes"
+                    )
+                    self.server.logger.warning(
+                        f"Trying again with {replication_factor} nodes"
+                    )
+                    # choose REPLICATION_LEVEL - num_failures nodes
+                    # that are not in tried_nodes
+                    chosen_node_cnt = replication_factor
+                    # clear nodes_to_store
+                    nodes_to_store.clear()
+
+                    while chosen_node_cnt > 0:
+                        node = random.choice(self.server.membership_list)
+                        if node not in tried_nodes:
+                            nodes_to_store.append(node)
+                            tried_nodes.append(node)
+                            chosen_node_cnt -= 1
+
+            # send a response to the client
+            client_ack_message = FileStoreMessage(
+                MessageType.FILE_ACK,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                message.version,
+                b"",  # no data -- this is an ack
+            )
+
+            self.server.logger.info(f"Replying with {client_ack_message}")
+            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
+
+        else:
+            # store the file locally
+            self.server.file_store.put_file(message.file_name, message.data)
+
+    def _process_get(self, message: FileStoreMessage) -> None:
+        """
+        Process a GET message and send the file
+        :param message: The received message
+        :return: None
+        """
+        pass
+
+    def _process_delete(self, message: FileStoreMessage) -> None:
+        """
+        Process a DELETE message and delete the file
+        :param message: The received message
+        :return: None
+        """
+        pass
+
+    def _process_ls(self, message: FileStoreMessage) -> None:
+        """
+        Process a LS message and send the list of files
+        :param message: The received message
+        :return: None
+        """
+        pass
 
     def _process_message(self, message) -> None:
         """
@@ -191,56 +290,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
             self.server.logger.info(f"Received PUT request for {message.file_name}")
-            self.server.file_store.put_file(message.file_name, message.data)
-            # reply with FILE_ACK
-
-            # if this node is the introducer, broadcast the received message to all other nodes
-            # but, since we want the nodes to ack to the introducer, not the client, we need to
-            # change the ip and port to the introducer's
-
-            # TODO: @Zhuxuan:
-            # This is where we broadcast to either the leader, or the other nodes.
-            # The leader is determined, currently, only in the join_network function.
-            # We need to change this to be determined by the leader election algorithm.
-
-            if self.server.is_introducer:
-
-                message.ip = self.server.host
-                message.port = self.server.port
-                message.timestamp = self.server.timestamp
-                self.server.logger.info(
-                    "I am the leader. Broadcasting PUT request to neighbors!"
-                )
-                self.server.broadcast_to_neighbors(message)
-
-                # reply to the sender (the client)
-                client_ack_message = FileStoreMessage(
-                    MessageType.FILE_ACK,
-                    self.server.host,
-                    self.server.port,
-                    self.server.timestamp,
-                    message.file_name,
-                    message.version,
-                    b"",  # no data -- this is an ack
-                )
-                self.server.logger.info(f"Replying with {client_ack_message}")
-                self.request.sendall(add_len_prefix(client_ack_message.serialize()))
-
-            else:
-                # ack to the introducer
-                self.server.logger.info("I am not the leader. Acking to leader!")
-                print(f"{message}")
-                self_ack_message = FileStoreMessage(
-                    MessageType.FILE_ACK,
-                    self.server.host,
-                    self.server.port,
-                    self.server.timestamp,
-                    message.file_name,
-                    message.version,
-                    b"",  # no data -- this is an ack
-                )
-                addr = (self.server.leader_host, self.server.leader_port)
-                self._send(self_ack_message, addr)
+            self._process_put(message)
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
@@ -557,33 +607,43 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         return True
 
-    def broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
+    def broadcast_to(self, message: Message, who: List[Member]) -> Dict[Member, bool]:
         """
-        Broadcast a message to all neighbors
+        Broadcast a message to all `who`
         :param message: the message to broadcast
         :return: a dict of neighbors and whether the message was sent successfully
         """
-        neighbors_to_successes = {}
-        neighbors = MembershipList(self.get_neighbors())
+        who_to_successes = {}
+        who = MembershipList(self.get_neighbors())
 
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
                 executor.submit(self._send, message, neighbor): neighbor
-                for neighbor in neighbors
+                for neighbor in who
             }
             for future in concurrent.futures.as_completed(future_to_member):
                 member = future_to_member[future]
                 try:
                     data = future.result()
-                    neighbors_to_successes[member] = data
+                    who_to_successes[member] = data
                     self.logger.debug(f"Sent message to {member}")
                 except Exception as exc:
                     self.logger.critical(
                         in_red(f"{member} generated an exception: {exc}")
                     )
 
-        return neighbors_to_successes
+        return who_to_successes
+
+    def broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
+        """
+        Broadcast a message to all neighbors
+        :param message: the message to broadcast
+        :return: a dict of neighbors and whether the message was sent successfully
+        """
+
+        neighbors = self.get_neighbors()
+        return self.broadcast_to(message, neighbors)
 
     def add_new_member(self, member) -> None:
         # add the new member to the membership list

@@ -17,6 +17,8 @@ INTRODUCER_PORT = 8080
 
 ELECT_LEADER_TIMEOUT = 3
 
+REPLICATION_LEVEL = 4
+
 
 class MessageType(IntEnum):
     # Communication messages
@@ -37,10 +39,11 @@ class MessageType(IntEnum):
     GET = 10
     DELETE = 11
     FILE_ACK = 12
+    LS = 13
 
     # Membership messages
-    NEW_NODE = 13
-    MEMBERSHIP_LIST = 14
+    NEW_NODE = 14
+    MEMBERSHIP_LIST = 15
 
 
 # PORT IDs

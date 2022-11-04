@@ -187,3 +187,13 @@ ip_url_dict = {
     ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
     for i in range(1, 10)
 }
+
+
+def get_replication_level(num_nodes, replication_factor):
+    """
+    Gets the replication level for the filestore
+    :param num_nodes: the number of nodes in the membership list
+    :param replication_factor: the replication factor
+    :return: the replication level
+    """
+    return min(num_nodes, replication_factor)
