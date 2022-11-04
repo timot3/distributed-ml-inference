@@ -4,7 +4,17 @@ import textwrap
 import time
 from typing import Tuple
 
-from Node.types import bcolors, MessageType, Message, FileStoreMessage
+from Node.types import (
+    bcolors,
+    MessageType,
+    Message,
+    FileStoreMessage,
+    MembershipListMessage,
+)
+
+
+def is_membership_message(message_type: int) -> bool:
+    return message_type == MessageType.MEMBERSHIP_LIST
 
 
 def is_communication_message(message_type: int) -> bool:
@@ -14,7 +24,8 @@ def is_communication_message(message_type: int) -> bool:
     :return: True if the message is a communication message, False otherwise
     """
     return (
-        message_type == MessageType.JOIN
+        message_type == MessageType.NEW_NODE
+        or message_type == MessageType.JOIN
         or message_type == MessageType.LEAVE
         or message_type == MessageType.PING
         or message_type == MessageType.PONG
@@ -158,6 +169,8 @@ def get_message_from_bytes(data: bytes) -> Message:
         return Message.deserialize(data)
     elif is_filestore_message(message_type):
         return FileStoreMessage.deserialize(data)
+    elif is_membership_message(message_type):
+        return MembershipListMessage.deserialize(data)
     elif is_election_message(message_type):
         raise NotImplementedError
         # future work

@@ -16,6 +16,7 @@ from .types import (
     BUFF_SIZE,
     bcolors,
     FileStoreMessage,
+    MembershipListMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -69,6 +70,17 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 "Machine {} not found in membership list".format(ack_machine)
             )
 
+    def _process_join(self, message, new_member):
+        if self.server.membership_list.has_machine(new_member):
+            self.server.logger.debug(
+                "Machine {} already exists in the membership list".format(new_member)
+            )
+            return
+        self.server.broadcast_to_neighbors(message)
+        # add the member after broadcasting
+        # in order to not include the member in neighbors
+        self.server.add_new_member(new_member)
+
     def _process_message(self, message) -> None:
         """
         Process the message and take the appropriate action
@@ -78,20 +90,42 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         self.server.logger.debug("Processing message: {}".format(message))
         # vary the behavior based on the message type
-
-        # handle JOIN
-        if message.message_type == MessageType.JOIN:
-            new_member = Member(message.ip, message.port, message.timestamp)
-            self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
-            if self.server.membership_list.has_machine(new_member):
-                self.server.logger.debug(
-                    "Machine {} already exists in the membership list".format(new_member)
+        new_member_machine = Member(
+            message.ip,
+            message.port,
+            message.timestamp,
+        )
+        if message.message_type == MessageType.NEW_NODE:
+            if not self.server.is_introducer:
+                self.server.logger.warning(
+                    f"Received a NEW_NODE message from {new_member_machine} but I am not the introducer"
                 )
                 return
-            self.server.broadcast_to_neighbors(message)
-            # add the member after broadcasting
-            # in order to not include the member in neighbors
-            self.server.add_new_member(new_member)
+
+            print(self.server.membership_list)
+            self.server.logger.info(f"New member {new_member_machine} joined")
+            new_membership_list = self.server.membership_list + [new_member_machine]
+            new_membership_list = MembershipList(new_membership_list)
+
+            membership_list_msg = MembershipListMessage(
+                MessageType.MEMBERSHIP_LIST,
+                self.server.host,
+                self.server.port,
+                int(time.time()),
+                new_membership_list,
+            )
+            # send the membership list to the node via the tcp socket
+            self.request.sendall(add_len_prefix(membership_list_msg.serialize()))
+
+            self._process_join(message, new_member_machine)
+            print(self.server.membership_list)
+
+        # handle JOIN
+        elif message.message_type == MessageType.JOIN:
+            new_member = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
+
+            self._process_join(message, new_member)
 
         # handle PING
         elif message.message_type == MessageType.PING:
@@ -233,8 +267,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self,
         host,
         port,
-        introducer_host,
-        introducer_port,
         is_introducer=False,
         slow_mode=False,
     ):
@@ -246,8 +278,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.is_introducer = is_introducer
         self.slow_mode = slow_mode
 
-        self.introducer_host = introducer_host
-        self.introducer_port = introducer_port
+        # self.introducer_host = introducer_host
+        # self.introducer_port = introducer_port
 
         # initialized when the node joins the ring
         self.leader_host = None
@@ -259,10 +291,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.logger = logging.getLogger("NodeServer")
         self.logger.setLevel(logging.INFO)
-
-        # create a tcp socket to connect to the introducer
-        # it will be initialized when the node joins the network
-        self.introducer_socket = None
 
         self.in_ring = False
 
@@ -283,44 +311,80 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         super().validate_request(request, message)
 
-    def join_network(self) -> bool:
+    def join_network(self, introducer_host="localhost", introducer_port=8080) -> bool:
         """
         Join the network by connecting to the introducer
         and processing the received membership list.
         :return: If the connection was successful
         """
 
-        if self.introducer_socket is not None:
-            self.logger.error("Already connected to the introducer")
-            return False
-        self.introducer_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        # send a message to the introducer to register this node
-
-        # find the ip of this machine
-        # send the ip and port of this machine to the introducer
-        ip, port = get_self_ip_and_port(self.socket)
-        self.timestamp = int(time.time())
-        self.member = Member(ip, port, self.timestamp)
-
-        join_message = Message(MessageType.JOIN, ip, port, self.timestamp)
-        try:
-            self.introducer_socket.connect((self.introducer_host, self.introducer_port))
-        except OSError:
-            self.logger.error("Already connected to introducer")
+        if self.in_ring:
+            self.logger.error("Already in ring")
             return False
 
-        self.introducer_socket.sendall(join_message.serialize())
-        # get the response from the introducer
-        response = self.introducer_socket.recv(1024)
-        # print the response for now
-        membership_list = MembershipList.deserialize(response)
-        self.logger.info("Received membership list: {}".format(membership_list))
-        self.membership_list = membership_list
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as introducer_sock:
+
+            introducer_sock.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
+            host, port = get_self_ip_and_port(self.socket)
+            self.timestamp = int(time.time())
+
+            self.member = Member(host, port, self.timestamp)
+
+            if self.is_introducer:
+                self.in_ring = True
+                self.leader_host = self.host
+                self.leader_port = self.port
+                self.logger.info("I am the introducer. I am the leader!")
+                # set the membership list to contain only the introducer
+                self.membership_list = MembershipList([self.member])
+                # TODO: What if the leader leaves and rejoins?
+
+                self.start_heartbeat_watchdog()
+
+                return True
+
+            try:
+                if introducer_sock.connect_ex((introducer_host, introducer_port)) != 0:
+                    self.logger.error("Could not connect to introducer")
+                    return False
+
+                # first, construct self's member
+                join_message = Message(MessageType.NEW_NODE, host, port, self.timestamp)
+
+                # send the new node message to the introducer
+                introducer_sock.sendall(add_len_prefix(join_message.serialize()))
+
+                # get the response from the introducer
+                response = introducer_sock.recv(BUFF_SIZE)
+                _, response = trim_len_prefix(response)  # don't care about the length
+                # can close the socket now
+            except socket.timeout:
+                self.logger.error("Could not connect to introducer")
+                return False
+
+        # deserialize the response
+        # this response should be a MEMBERSHIP LIST
+        recvd_message = MembershipListMessage.deserialize(response)
+
+        if recvd_message.message_type != MessageType.MEMBERSHIP_LIST:
+            raise ValueError(
+                "Expected MEMBERSHIP_LIST message type, got {}".format(
+                    recvd_message.message_type
+                )
+            )
+
+        # update the membership list
+        self.membership_list = recvd_message.membership_list
+        self.logger.info(f"Received membership list: {self.membership_list}")
+
         self.in_ring = True
 
         # set the leader
         self.leader_host = self.membership_list[0].ip
         self.leader_port = self.membership_list[0].port
+
+        # start the heartbeat watchdog
+        self.start_heartbeat_watchdog()
 
         return True
 
@@ -331,8 +395,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :return:
         """
         self.membership_list = MembershipList([])
-        self.introducer_socket.close()
-        self.introducer_socket = None
         self.join_network()
 
     def leave_network(self) -> bool:
@@ -352,8 +414,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.membership_list = MembershipList([])
 
         # disconnect the introducer socket
-        self.introducer_socket.close()
-        self.introducer_socket = None
         self.in_ring = False
         return True
 
@@ -474,6 +534,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         neighbors_to_successes = {}
         neighbors = MembershipList(self.get_neighbors())
+
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {

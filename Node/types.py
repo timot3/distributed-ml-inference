@@ -12,23 +12,30 @@ HEARTBEAT_WATCHDOG_TIMEOUT = 5
 
 BUFF_SIZE = 4096
 
+INTRODUCER_HOST = "localhost"
+INTRODUCER_PORT = 8080
+
 
 class MessageType(IntEnum):
     # Communication messages
-    JOIN = 0
-    LEAVE = 1
-    PING = 2
-    PONG = 3
-    DISCONNECTED = 4  # sent to node that is disconnected
+    JOIN = 1
+    LEAVE = 2
+    PING = 3
+    PONG = 4
+    DISCONNECTED = 5  # sent to node that is disconnected
 
     # Election messages
     # todo @zhuxuan: add election messages
 
     # FileStore messages
-    PUT = 7
-    GET = 8
-    DELETE = 9
-    FILE_ACK = 10
+    PUT = 8
+    GET = 9
+    DELETE = 10
+    FILE_ACK = 11
+
+    # Membership messages
+    NEW_NODE = 12
+    MEMBERSHIP_LIST = 13
 
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
@@ -172,7 +179,7 @@ class FileStoreMessage(Message):
 
     def __str__(self):
         msg_type = MessageType(self.message_type).name
-        return f"FileStoreMessage({msg_type}, ip={self.ip}, port={self.port}, timestamp={self.timestamp}, file_name={self.file_name}, version={self.version}, data={self.data})"
+        return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={self.data})"
 
 
 class Member:
@@ -243,10 +250,6 @@ class Member:
 
 
 class MembershipList(list):
-    # def __init__(self, membership_list: List[Member]):
-    #     super().__init__()
-    #     self.list = membership_list
-
     def has_machine(self, member: Member) -> bool:
         for m in self:
             if m.is_same_machine_as(member):
@@ -262,8 +265,6 @@ class MembershipList(list):
                 with lock:
                     m.last_heartbeat = new_timestamp
                 return True
-
-        logging.getLogger(__name__).info(f"Could not find {member} in membership list")
         return False
 
     def get_machine(self, member) -> Optional[Member]:
@@ -299,3 +300,52 @@ class MembershipList(list):
         # verify that the ip and port are valid
 
         return cls(membership_list)
+
+
+class MembershipListMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        members: MembershipList,
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.membership_list = members
+
+    def serialize(self):
+        """
+        Serialize the message into bytes
+        :return: the bytes representation of the message
+        """
+        base_message = super().serialize()
+        # pack the number of members into a 4 byte int using struct.pack
+        membership_list_serialized = self.membership_list.serialize()
+
+        return base_message + membership_list_serialized
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        base_size = communication_struct.size
+
+        if len(data) < base_size:
+            raise ValueError("Invalid message")
+
+        # get the message type
+        # the first 14 bytes are the same as the communication message
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # deserialize the remainder of the message using MembershipList.deserialize
+        # the remainder of the message is the membership list
+        membership_list = MembershipList.deserialize(data[base_size:])
+
+        return cls(message_type, ip, port, timestamp, membership_list)
+
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"MembershipListMessage({msg_type}, members={self.members})"
