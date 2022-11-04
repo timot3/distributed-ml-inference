@@ -20,7 +20,7 @@ from .types import (
     bcolors,
     DnsDaemonPortID,
     VM1_URL,
-    FileStoreMessage,
+    FileMessage,
     MembershipListMessage,
 )
 from .utils import (
@@ -87,7 +87,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # in order to not include the member in neighbors
         self.server.add_new_member(new_member)
 
-    def _process_put(self, message: FileStoreMessage) -> None:
+    def _process_put(self, message: FileMessage) -> None:
         """
         Process a PUT message and store the file
         :param message: The received message
@@ -141,7 +141,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                             chosen_node_cnt -= 1
 
             # send a response to the client
-            client_ack_message = FileStoreMessage(
+            client_ack_message = FileMessage(
                 MessageType.FILE_ACK,
                 self.server.host,
                 self.server.port,
@@ -158,7 +158,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # store the file locally
             self.server.file_store.put_file(message.file_name, message.data)
 
-    def _process_get(self, message: FileStoreMessage) -> None:
+    def _process_get(self, message: FileMessage) -> None:
         """
         Process a GET message and send the file
         :param message: The received message
@@ -166,7 +166,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         pass
 
-    def _process_delete(self, message: FileStoreMessage) -> None:
+    def _process_delete(self, message: FileMessage) -> None:
         """
         Process a DELETE message and delete the file
         :param message: The received message
@@ -174,12 +174,14 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         pass
 
-    def _process_ls(self, message: FileStoreMessage) -> None:
+    def _process_ls(self, message: FileMessage) -> None:
         """
         Process a LS message and send the list of files
         :param message: The received message
         :return: None
         """
+        # reply with everything in the filestore
+
         pass
 
     def _process_message(self, message) -> None:

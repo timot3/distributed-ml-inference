@@ -8,7 +8,7 @@ from Node.types import (
     bcolors,
     MessageType,
     Message,
-    FileStoreMessage,
+    FileMessage,
     MembershipListMessage,
 )
 
@@ -169,7 +169,7 @@ def get_message_from_bytes(data: bytes) -> Message:
     if is_communication_message(message_type):
         return Message.deserialize(data)
     elif is_filestore_message(message_type):
-        return FileStoreMessage.deserialize(data)
+        return FileMessage.deserialize(data)
     elif is_membership_message(message_type):
         return MembershipListMessage.deserialize(data)
     elif is_election_message(message_type):

@@ -5,6 +5,8 @@ from typing import List, Any, Optional
 import logging
 from threading import Lock
 
+from FileStore.FileStore import FileStore
+
 lock = Lock()
 
 # timeout duration of heartbeat
@@ -134,7 +136,7 @@ class Message:
         return hash((self.message_type, self.ip, self.port, self.timestamp))
 
 
-class FileStoreMessage(Message):
+class FileMessage(Message):
     def __init__(
         self,
         message_type: MessageType,
@@ -198,6 +200,26 @@ class FileStoreMessage(Message):
     def __str__(self):
         msg_type = MessageType(self.message_type).name
         return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={self.data})"
+
+
+class LSMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        files: FileStore,
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.files = files
+
+    def serialize(self):
+        raise NotImplementedError
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        raise NotImplementedError
 
 
 class Member:

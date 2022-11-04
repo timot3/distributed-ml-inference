@@ -1,6 +1,6 @@
 import socket
 
-from Node.types import FileStoreMessage, MessageType
+from Node.types import FileMessage, MessageType
 from Node.utils import trim_len_prefix, add_len_prefix
 
 BUFF_SIZE = 4096
@@ -21,7 +21,7 @@ def recvall(sock):
 
 def make_file_message(
     file_data: bytes, message_type: MessageType, host: str, port: int
-) -> FileStoreMessage:
+) -> FileMessage:
     """
     Create a filestore message from the file data
     :param file_data: the file data in bytes
@@ -30,7 +30,7 @@ def make_file_message(
     :param port: the host port (where the message is sent from)
     :return: the FileStoreMessage with dummy values for ip, port, and timestamp
     """
-    return FileStoreMessage(
+    return FileMessage(
         message_type,  # message type
         host,  # ip
         port,  # port
@@ -63,5 +63,5 @@ if __name__ == "__main__":
 
         s.sendall(add_len_prefix(file_message.serialize()))
         data = recvall(s)
-        file_message = FileStoreMessage.deserialize(data)
+        file_message = FileMessage.deserialize(data)
         print(f"Received {file_message}")
