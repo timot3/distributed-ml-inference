@@ -1,3 +1,4 @@
+import struct
 from typing import List
 
 from FileStore.types import MAX_NUM_VERSIONS
@@ -8,12 +9,45 @@ class File:
     Class to represent a file
     """
 
-    def __init__(self, file_name: str, file_content: bytes):
+    def __init__(
+        self, file_name: str, file_content: bytes, filesize: int = 0, version: int = 0
+    ):
         self.file_name = file_name
         self.file_content = file_content
+        if filesize == 0:
+            self.file_size = len(file_content)
+        else:
+            self.file_size = filesize
+        self.version = version
 
     def serialize(self):
+
         return self.file_content
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        pass
+
+    def ls_serialize(self):
+        # return bytes of the following form:
+        # 32 bytes for the filename
+        # 4 bytes for the version
+        # 4 bytes for the length of the data in bytes
+        # all of this is separated by a colon
+
+        # use struct.pack to pack the data into bytes
+
+        name_bytes = struct.pack(">32s", self.file_name.encode("utf-8"))
+        version_bytes = struct.pack(">I", self.version)
+        size_bytes = struct.pack(">I", self.file_size)
+        return name_bytes + b":" + version_bytes + b":" + size_bytes
+
+    @classmethod
+    def ls_deserialize(cls, data: bytes):
+        # use struct.unpack to unpack the data from bytes
+        data = data.decode("utf-8")
+        name, version, size = data.split(":")
+        return cls(name, b"", filesize=int(size), version=int(version))
 
 
 class FileStore:
@@ -74,3 +108,10 @@ class FileStore:
         if file_name not in self.file_map:
             return []
         return self.file_map.pop(file_name)
+
+    def get_latest_versions(self) -> List[File]:
+        """
+        Get the latest version of all files
+        :return: A list of the latest version of all files
+        """
+        return [self.file_map[file_name][-1] for file_name in self.file_map]

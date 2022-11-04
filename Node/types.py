@@ -5,7 +5,7 @@ from typing import List, Any, Optional
 import logging
 from threading import Lock
 
-from FileStore.FileStore import FileStore
+from FileStore.FileStore import File, FileStore
 
 lock = Lock()
 
@@ -209,17 +209,34 @@ class LSMessage(Message):
         ip: str,
         port: int,
         timestamp: int,
-        files: FileStore,
+        files: List[File],
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.files = files
 
     def serialize(self):
-        raise NotImplementedError
+        base_message = super().serialize()
+        # serialize the files
+        ls_files = b",".join(file.ls_serialize() for file in self.files)
+
+        return base_message + ls_files
 
     @classmethod
     def deserialize(cls, data: bytes):
-        raise NotImplementedError
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # get the file list
+        if len(data) > communication_struct.size:
+            files = data[communication_struct.size :].split(b",")
+            files = [File.ls_deserialize(file) for file in files]
+        else:
+            files = []
+
+        return cls(message_type, ip, port, timestamp, files)
 
 
 class Member:
