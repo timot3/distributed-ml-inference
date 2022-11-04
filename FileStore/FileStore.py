@@ -25,7 +25,7 @@ class FileStore:
     def __init__(self):
         self.file_map = {}
 
-    def add_file(self, file_name, file_content):
+    def put_file(self, file_name, file_content):
         """
         Add a file to the file store
         """

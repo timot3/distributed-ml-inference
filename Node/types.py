@@ -28,6 +28,7 @@ class MessageType(IntEnum):
     PUT = 7
     GET = 8
     DELETE = 9
+    FILE_ACK = 10
 
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
@@ -44,11 +45,11 @@ class bcolors:
 
 
 # join message has the following fields:
-# 1 byte for message type
+# 4 byte for message type
 # 4 bytes for my ip address
 # 2 bytes for my port
 # 4 bytes for my timestamp
-JOIN_FORMAT = "!B4sHI"
+JOIN_FORMAT = "!I4sHI"
 join_struct = struct.Struct(JOIN_FORMAT)
 
 # membership list message has the following fields
@@ -64,7 +65,7 @@ membership_list_struct = struct.Struct(MEMBERSHIP_LIST_FORMAT)
 # 4 bytes for the ip address of the sender
 # 2 bytes for the port of the sender
 # 4 bytes for the timestamp of the sender
-COMMUNICATION_FORMAT = "!B4sHI"
+COMMUNICATION_FORMAT = "!I4sHI"
 communication_struct = struct.Struct(COMMUNICATION_FORMAT)
 
 
@@ -84,7 +85,10 @@ class Message:
 
     @classmethod
     def deserialize(cls, data: bytes):
-        message_type, ip, port, timestamp = communication_struct.unpack(data)
+        # focus on the first 14 bytes
+        message_type, ip, port, timestamp = communication_struct.unpack(
+            data[: communication_struct.size]
+        )
         # convert the ip address to a string
         ip = socket.inet_ntoa(ip)
         return cls(message_type, ip, port, timestamp)
@@ -113,11 +117,13 @@ class FileStoreMessage(Message):
         port: int,
         timestamp: int,
         file_name: str,
-        data: Any,
+        version: int,
+        data: bytes,
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.file_name = file_name
         self.data = data
+        self.version = version
 
     def serialize(self):
         """
@@ -128,36 +134,46 @@ class FileStoreMessage(Message):
         # pack the filename into a 32 byte string using struct.pack
         file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
 
-        # convert data to bytes
-        data = self.data.encode("utf-8")
+        # pack the version into a 4 byte int using struct.pack
+        version = struct.pack(">I", self.version)
 
         # finally, append all the bytes together
-        return base_message + file_name + data
+
+        return base_message + file_name + version + self.data
 
     @classmethod
     def deserialize(cls, data: bytes):
+        base_size = communication_struct.size
+
+        min_size = base_size + 36
+        print(len(data))
+        if len(data) < min_size:
+            raise ValueError("Invalid message")
+
         # get the message type
-        # the first 12 bytes are the same as the communication message
-        base_message = Message.deserialize(data[:12])
+        # the first 14 bytes are the same as the communication message
+        base_message = Message.deserialize(data[: communication_struct.size])
         message_type = base_message.message_type
         ip = base_message.ip
         port = base_message.port
         timestamp = base_message.timestamp
 
-        # the next 32 bytes (bytes 12 - 44) are the file name
-        # use struct.unpack to get the file name, then convert it to a string
-        file_name = struct.unpack(">32s", data[12:44])[0].decode("utf-8").strip("\x00")
+        # get the filename
+        file_name = struct.unpack(">32s", data[base_size : base_size + 32])[0]
+        file_name = file_name.decode("utf-8").strip("\x00")
 
-        # the rest of the data is the filestore data
-        # use struct.unpack to get the data, then convert it to a string
+        # get the version
+        version = struct.unpack(">I", data[base_size + 32 : base_size + 36])[0]
 
-        # first, get the length of the data
-        remaining_len = len(data) - 44
-        # then, get the data as bytes
-        filestore_data = struct.unpack(f">{remaining_len}s", data[44:])[0]
+        # get the data using struct.unpack and the length of the data
+        remaining_len = len(data) - base_size - 36
+        data = struct.unpack(f">{remaining_len}s", data[base_size + 36 :])[0]
 
-        # fnally, construct the FileStoreMessage
-        return cls(message_type, ip, port, timestamp, file_name, filestore_data)
+        return cls(message_type, ip, port, timestamp, file_name, version, data)
+
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"FileStoreMessage({msg_type}, ip={self.ip}, port={self.port}, timestamp={self.timestamp}, file_name={self.file_name}, version={self.version}, data={self.data})"
 
 
 class Member:

@@ -2,6 +2,7 @@ import socket
 import struct
 import textwrap
 import time
+from typing import Tuple
 
 from Node.types import bcolors, MessageType, Message, FileStoreMessage
 
@@ -41,9 +42,10 @@ def is_filestore_message(message_type: int) -> bool:
     :return: True if the message is a filestore message, False otherwise
     """
     return (
-        message_type == MessageType.PUT.value
-        or message_type == MessageType.GET.value
-        or message_type == MessageType.DELETE.value
+        message_type == MessageType.PUT
+        or message_type == MessageType.GET
+        or message_type == MessageType.DELETE
+        or message_type == MessageType.FILE_ACK
     )
 
 
@@ -59,12 +61,12 @@ def in_blue(text):
     return bcolors.OKBLUE + text + bcolors.ENDC
 
 
-def add_len_prefix(message: str) -> int:
+def add_len_prefix(message: bytes) -> bytes:
     msg = struct.pack(">I", len(message)) + message
     return msg
 
 
-def trim_len_prefix(message):
+def trim_len_prefix(message: bytes) -> Tuple[int, bytes]:
     msg_len = struct.unpack(">I", message[:4])[0]
     msg = message[4 : 4 + msg_len]
     return msg_len, msg
@@ -150,7 +152,7 @@ def get_message_from_bytes(data: bytes) -> Message:
     if len(data) == 0:
         raise ValueError("Empty message")
 
-    message_type = struct.unpack(">B", data[:1])[0]
+    message_type = struct.unpack(">I", data[:4])[0]
 
     if is_communication_message(message_type):
         return Message.deserialize(data)

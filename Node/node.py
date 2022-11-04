@@ -15,6 +15,7 @@ from .types import (
     HEARTBEAT_WATCHDOG_TIMEOUT,
     BUFF_SIZE,
     bcolors,
+    FileStoreMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -133,7 +134,24 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
-            raise NotImplementedError
+            self.server.logger.info(f"Received PUT request for {message.file_name}")
+            self.server.file_store.put_file(message.file_name, message.data)
+            # reply with FILE_ACK
+
+            ack_message = FileStoreMessage(
+                MessageType.FILE_ACK,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                message.version,
+                message.data,
+            )
+            self.server.logger.info(f"Replying with {ack_message}")
+            # reply to the sender (the client)
+            # TODO: adapt this to reply to a server
+            # TODO add length prefix
+            self.request.sendall(add_len_prefix(ack_message.serialize()))
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
@@ -321,8 +339,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
             for member, response in responses.items():
                 if not response:
-                    self.logger.info("Member {} has failed".format(member))
-                    self.membership_list.remove(member)
+                    self.logger.info(
+                        f"Member {member} has failed! Attempting to notify them...."
+                    )
 
                     # send a disconnect mesage to the failed member
                     disconnect_message = Message(
@@ -331,10 +350,18 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                         member.port,
                         member.timestamp,
                     )
-                    self._send(disconnect_message, member)
+                    if self._send(disconnect_message, member):
+                        self.logger.info(
+                            f"Successfully notified {member} of their failure, meaning they are still alive"
+                        )
+                        continue
 
                     # broadcast a LEAVE message to all neighbors with the failed member's info
-
+                    self.logger.info(
+                        f"Failed to notify {member} of their failure, meaning they are dead. Notifying neighbors..."
+                    )
+                    # remove the failed member from the membership list
+                    self.membership_list.remove(member)
                     leave_message = Message(
                         MessageType.LEAVE, member.ip, member.port, member.timestamp
                     )

@@ -5,7 +5,13 @@ import time
 import sys
 from .types import Message, MessageType, MembershipList, Member
 from .node import NodeTCPServer
-from .utils import add_len_prefix, get_any_open_port, get_self_ip_and_port
+from .utils import (
+    add_len_prefix,
+    get_any_open_port,
+    get_self_ip_and_port,
+    in_blue,
+    in_green,
+)
 import logging
 
 
@@ -68,7 +74,9 @@ class IntroducerServer(socketserver.TCPServer):
 
     def start_node_server_thread(self):
         self.node_thread = threading.Thread(target=self._start_node_server)
-        self.logger.info(f"Starting node server thread on port {self.node.port}")
+        self.logger.info(
+            in_green(f"Starting node server thread on port {self.node.port}")
+        )
         self.node_thread.start()
 
     def server_bind(self):
