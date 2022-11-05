@@ -276,8 +276,9 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # get the latest version of the file
 
         for member, message in resp.items():
+            print(f"Received {message} from {member}")
             if message.message_type == MessageType.FILE_ACK:
-                if message.version > latest_file.version:
+                if message.version >= latest_file.version and message.data != b"":
                     latest_file = File(message.file_name, message.data, message.version)
 
         # reply with the latest version of the file

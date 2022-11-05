@@ -1,4 +1,5 @@
 import socket
+import time
 from typing import List
 
 from Node.types import FileMessage, Message, MessageType
@@ -92,9 +93,10 @@ def get_filestore_command(host, port, command=None):
     elif command[0] == "get":
         command_message = make_file_message(b"", command[1], MessageType.GET, host, port)
         response = send_file_message(host, port, command_message)
+        print(response)
 
         with open(command[2], "wb") as f:
-            f.write(response.data)
+            f.write(str(response.data).encode("utf-8"))
         print("Done writing file")
 
     elif command[0] == "delete":
@@ -110,7 +112,15 @@ if __name__ == "__main__":
     HOST, PORT = "127.0.0.1", 8080
     # while True:
     #     get_filestore_command(HOST, PORT)
-    put_str = "put testfiles/numbers.txt c.txt"
-    get_str = "get c.txt d.txt"
-    get_filestore_command(HOST, PORT, put_str.split(" "))
-    get_filestore_command(HOST, PORT, get_str.split(" "))
+
+    puts = []
+    gets = []
+    alphabet = "abcdefghijklmnopqrstuvwxyz"
+    for i in range(len(alphabet)):
+        puts.append(["put", "testfiles/numbers.txt", f"{alphabet[i]}.txt"])
+        gets.append(["get", f"{alphabet[i]}.txt", f"testfiles/res_{alphabet[i]}.txt"])
+
+    for get, put in zip(gets, puts):
+        get_filestore_command(HOST, PORT, put)
+        get_filestore_command(HOST, PORT, get)
+        time.sleep(3)

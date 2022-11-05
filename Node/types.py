@@ -166,15 +166,6 @@ class FileMessage(Message):
         version = struct.pack(">I", self.version)
 
         # finally, append all the bytes together
-        print("type of base message is ", type(base_message))
-        print(base_message)
-        print("type of file name is ", type(file_name))
-        print(file_name)
-        print("type of version is ", type(version))
-        print(version)
-        print("type of data is ", type(self.data))
-        print(self.data)
-
         return base_message + file_name + version + self.data
 
     @classmethod
@@ -208,7 +199,10 @@ class FileMessage(Message):
 
     def __str__(self):
         msg_type = MessageType(self.message_type).name
-        return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={self.data})"
+        data_first_10 = self.data[:10]
+        if len(self.data) > 10:
+            data_first_10 += b"..."
+        return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={data_first_10})"
 
 
 class LSMessage(Message):
