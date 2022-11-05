@@ -7,6 +7,8 @@ import time
 import traceback
 from typing import Any, List, Optional, Tuple, Dict
 
+# from nodeelectinfo import NodeElectInfo
+
 import random
 
 from FileStore.FileStore import File, FileStore
@@ -75,6 +77,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # set the handler class
         self.RequestHandlerClass = NodeHandler
         self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        # self.election_info = NodeElectInfo()
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -328,7 +331,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 try:
                     data = future.result()
                     member_to_response[member] = data
-                    self.logger.debug(f"Sent message to {member}")
+                    self.logger.debug(f"Received resp {data} from {member}")
                 except Exception as exc:
                     self.logger.critical(
                         in_red(f"{member} generated an exception: {exc}")
@@ -392,6 +395,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         except ValueError:
             self.logger.error("I am not in membership list!")
         return idx
+
+    def get_self_id_tuple(self) -> Tuple[str, str, int]:
+        return (self.host, self.port, self.timestamp)
 
     def get_alleged_introducer_ip(self):
         """

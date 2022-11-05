@@ -58,6 +58,7 @@ def is_filestore_message(message_type: int) -> bool:
         or message_type == MessageType.GET
         or message_type == MessageType.DELETE
         or message_type == MessageType.FILE_ACK
+        or message_type == MessageType.FILE_ERROR
     )
 
 

@@ -42,10 +42,11 @@ class MessageType(IntEnum):
     DELETE = 11
     FILE_ACK = 12
     LS = 13
+    FILE_ERROR = 14
 
     # Membership messages
-    NEW_NODE = 14
-    MEMBERSHIP_LIST = 15
+    NEW_NODE = 15
+    MEMBERSHIP_LIST = 16
 
 
 # PORT IDs
@@ -165,6 +166,10 @@ class FileMessage(Message):
         version = struct.pack(">I", self.version)
 
         # finally, append all the bytes together
+        print("type of base message is ", type(base_message))
+        print("type of file name is ", type(file_name))
+        print("type of version is ", type(version))
+        print("type of data is ", type(self.data))
 
         return base_message + file_name + version + self.data
 
@@ -279,6 +284,10 @@ class Member:
         )
 
     def __lt__(self, other):
+        if self == other:
+            logging.warn(
+                f"Exactly the same elements detected when doing a less than comparison"
+            )
         if self.timestamp == other.timestamp:
             # tiebreak
             return self.ip < other.ip
@@ -351,6 +360,13 @@ class MembershipList(list):
                 return m
 
         return None
+
+    def find_machines_with_file(self, file_name: str) -> List[Member]:
+        machines = []
+        for m in self:
+            if file_name in m.files:
+                machines.append(m)
+        return machines
 
     def __str__(self):
         members = [str(member) for member in self]

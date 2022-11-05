@@ -33,6 +33,8 @@ from .utils import (
 class NodeHandler(socketserver.BaseRequestHandler):
     election_timestamp = time.time()
     election_lock = Lock()
+    claim_leader_timestamp = 0
+    claim_leader_lock = Lock()
 
     def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
         try:
@@ -118,7 +120,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 nodes_to_store.remove(self.server.member)
 
                 # update self's files in the membership list
-                self.member.files.add(message.file_name)
+                self.server.member.files.add(message.file_name)
 
                 replication_factor -= 1
                 num_successes += 1
@@ -160,14 +162,13 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # send a response to the client
         # get the file that was inserted
-        new_file = self.server.file_store.get_file(message.file_name)
         client_ack_message = FileMessage(
             MessageType.FILE_ACK,
             self.server.host,
             self.server.port,
             self.server.timestamp,
-            new_file.file_name,
-            new_file.version,
+            message.file_name,
+            0,  # version does not matter - this is an ack
             b"",  # no data -- this is an ack
         )
 
@@ -212,8 +213,101 @@ class NodeHandler(socketserver.BaseRequestHandler):
         :param message: The received message
         :return: None
         """
-        # send an LS to all other nodes
-        # and get the latest version of the file
+        # Contact all the nodes that have the file
+        # then request that they send the file
+        # then reply with the latest version of the file
+        # if the file is not found, reply with an error message
+
+        if not self.server.is_introducer:
+            # if we are not the introducer, we reply only if we have the file
+            my_file = self.server.file_store.get_file(message.file_name)
+            if my_file is not None:
+                # reply with the file
+                file_message = FileMessage(
+                    MessageType.FILE_ACK,
+                    self.server.host,
+                    self.server.port,
+                    self.server.timestamp,
+                    message.file_name,
+                    my_file.version,
+                    my_file.file_content,
+                )
+                self.request.sendall(add_len_prefix(file_message.serialize()))
+                return
+
+        # if we are the introducer, we need to contact all the nodes
+        # that have the file
+        # get the nodes that have the file
+        nodes_with_file = self.server.membership_list.find_machines_with_file(
+            message.file_name
+        )
+        if len(nodes_with_file) == 0:
+            # reply with an error message
+            error_message = FileMessage(
+                MessageType.FILE_ERROR,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                0,
+                b"",
+            )
+            self.request.sendall(add_len_prefix(error_message.serialize()))
+            return
+        # send a request to all the nodes that have the file
+        # construct the GET message
+        get_message = FileMessage(
+            MessageType.GET,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            message.file_name,
+            0,
+            b"",
+        )
+        latest_file: File = None
+        if self.server.member in nodes_with_file:
+            latest_file = self.server.file_store.get_file(message.file_name)
+            nodes_with_file.remove(self.server.member)
+        else:
+            latest_file: File = File(message.file_name, -1, b"")
+
+        resp = self.server.broadcast_to(get_message, nodes_with_file, recv=True)
+        # get the latest version of the file
+
+        for member, message in resp.items():
+            if message.message_type == MessageType.FILE_ACK:
+                if message.version > latest_file.version:
+                    latest_file = File(message.file_name, message.version, message.data)
+
+        # reply with the latest version of the file
+
+        # first, check if the file version is -1
+        if latest_file.version == -1:
+            # reply with an error message
+            error_message = FileMessage(
+                MessageType.FILE_ERROR,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                0,
+                b"",
+            )
+            self.request.sendall(add_len_prefix(error_message.serialize()))
+            return
+
+        # reply with the file
+        file_message = FileMessage(
+            MessageType.FILE_ACK,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            message.file_name,
+            latest_file.version,
+            latest_file.file_content,
+        )
+        self.request.sendall(add_len_prefix(file_message.serialize()))
 
     def _process_message(self, message) -> None:
         """
@@ -303,32 +397,55 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # No need for a different type of message to initiate election compared to
             # sending election messages to lower id nodes (action is exactly the same in
             # Bully algorithm for elections)
+            source = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(f"Received ELECT_PING message from {source}")
             raise NotImplementedError
-            # Find everyone in membership list
-            members = self.server.get_membership_list()
+            # Find everyone in membership list with lower id
+            smaller_members = [
+                x.get_self_id_tuple()
+                for x in self.server.get_membership_list()
+                if x < self
+            ]
 
             # Send to all others in membership list with lower id
+            claim_message = Message(
+                MessageType.ELECT_PING,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+            )
+            self.server.broadcast_to(claim_message, self.server.get_membership_list())
+
             # Wait for a short while
-            self.update_election_timestamp()
+            self.server.election_info.update_election_timestamp()
             time.sleep(ELECT_LEADER_TIMEOUT)
             # No replies - declare leader
-            if time.time() - self.get_election_timestamp() >= ELECT_LEADER_TIMEOUT:
+            if (
+                time.time() - self.server.election_info.get_election_timestamp()
+                >= ELECT_LEADER_TIMEOUT
+            ):
                 claim_message = Message(
                     MessageType.CLAIM_LEADER_PING,
                     self.server.host,
                     self.server.port,
                     self.server.timestamp,
                 )
-                self.server.broadcast_to(claim_message, self.server.get_membership_list())
+                self.server.broadcast_to(claim_message, smaller_members)
 
         elif message.message_type == MessageType.CLAIM_LEADER_ACK:
+            source = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(f"Received CLAIM_LEADER_ACK message from {source}")
             raise NotImplementedError
+            # If another leader claimed to be the leader within the timeout
+            # and still thinks it is the leader, initiate another election
 
         elif message.message_type == MessageType.CLAIM_LEADER_PING:
+            source = Member(message.ip, message.port, message.timestamp)
+            self.server.logger.info(f"Received CLAIM_LEADER_PING message from {source}")
+            raise NotImplementedError
             # Check if another node made a claim of being a leader in previous 5s
             # If so, initiate another election.
             # Otherwise, acknowledge sender as leader
-            raise NotImplementedError
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
