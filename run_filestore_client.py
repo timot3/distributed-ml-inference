@@ -110,7 +110,7 @@ if __name__ == "__main__":
     HOST, PORT = "127.0.0.1", 8080
     # while True:
     #     get_filestore_command(HOST, PORT)
-    put_str = "put testfiles/numbers.txt n.txt"
-    get_str = "get n.txt t.txt"
+    put_str = "put testfiles/numbers.txt c.txt"
+    get_str = "get c.txt d.txt"
     get_filestore_command(HOST, PORT, put_str.split(" "))
     get_filestore_command(HOST, PORT, get_str.split(" "))

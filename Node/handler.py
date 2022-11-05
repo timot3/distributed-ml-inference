@@ -270,7 +270,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             latest_file = self.server.file_store.get_file(message.file_name)
             nodes_with_file.remove(self.server.member)
         else:
-            latest_file: File = File(message.file_name, -1, b"")
+            latest_file: File = File(message.file_name, b"", -1)
 
         resp = self.server.broadcast_to(get_message, nodes_with_file, recv=True)
         # get the latest version of the file
@@ -278,7 +278,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         for member, message in resp.items():
             if message.message_type == MessageType.FILE_ACK:
                 if message.version > latest_file.version:
-                    latest_file = File(message.file_name, message.version, message.data)
+                    latest_file = File(message.file_name, message.data, message.version)
 
         # reply with the latest version of the file
 
@@ -401,6 +401,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
             self.server.logger.info(f"Received ELECT_PING message from {source}")
             raise NotImplementedError
             # Find everyone in membership list with lower id
+
+            # IMPORTANT: PREVENT SELF PINGS
             smaller_members = [
                 x.get_self_id_tuple()
                 for x in self.server.get_membership_list()

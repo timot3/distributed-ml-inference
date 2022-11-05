@@ -167,9 +167,13 @@ class FileMessage(Message):
 
         # finally, append all the bytes together
         print("type of base message is ", type(base_message))
+        print(base_message)
         print("type of file name is ", type(file_name))
+        print(file_name)
         print("type of version is ", type(version))
+        print(version)
         print("type of data is ", type(self.data))
+        print(self.data)
 
         return base_message + file_name + version + self.data
 
