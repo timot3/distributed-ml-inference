@@ -4,6 +4,7 @@ import time
 from typing import Any, List, Optional, Tuple, Dict
 
 import random
+from threading import Lock
 
 from FileStore.FileStore import File
 from .types import (
@@ -17,6 +18,7 @@ from .types import (
     BUFF_SIZE,
     FileMessage,
     MembershipListMessage,
+    ELECT_LEADER_TIMEOUT,
 )
 from .utils import (
     add_len_prefix,
@@ -29,6 +31,9 @@ from .utils import (
 
 
 class NodeHandler(socketserver.BaseRequestHandler):
+    election_timestamp = time.time()
+    election_lock = Lock()
+
     def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -194,6 +199,61 @@ class NodeHandler(socketserver.BaseRequestHandler):
         self.server.logger.info(f"Replying with {file_list_message}")
         self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
+    def _process_get(self, message) -> None:
+        """
+        Process a GET message and send the file
+        :param message: The received message
+        :return: None
+        """
+        # send an LS to all other nodes
+        # and get the latest version of the file
+
+        ls_resp = self.server.send_ls()
+        latest_version = -1
+        latest_version_node = None
+
+        for node, files in ls_resp.items():
+            for file in files:
+                if file.file_name == message.file_name:
+                    if file.version > latest_version:
+                        latest_version = file.version
+                        latest_version_node = node
+
+        if latest_version_node is None:
+            self.server.logger.info("File not found")
+            # send a response to the client
+            client_ack_message = FileMessage(
+                MessageType.GET,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                -1,
+                b"",
+            )
+
+            self.server.logger.info(f"Replying with {client_ack_message}")
+            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
+
+        else:
+            # file found!
+            # send a GET to the client with the latest version
+            latest_file = latest_version_node.file_store.get_latest_version(
+                message.file_name
+            )
+            client_ack_message = FileMessage(
+                MessageType.GET,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                latest_file.file_name,
+                latest_file.version,
+                latest_file.data,
+            )
+
+            self.server.logger.info(f"Replying with {client_ack_message}")
+            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
+
     def _process_message(self, message) -> None:
         """
         Process the message and take the appropriate action
@@ -283,19 +343,24 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # sending election messages to lower id nodes (action is exactly the same in
             # Bully algorithm for elections)
             # Find everyone in membership list
+
             # Send to all others in membership list with lower id
             # Wait for n seconds e.g. 5 seconds
+            time.sleep(ELECT_LEADER_TIMEOUT)
             # No replies - declare leader
-            pass
+            if time.time() - self.get_election_timestamp() >= ELECT_LEADER_TIMEOUT:
+                # self.server.broadcast_to(Message(), self.server.get_membership_list())
+                pass
+            raise NotImplementedError
 
         elif message.message_type == MessageType.CLAIM_LEADER_ACK:
-            pass
+            raise NotImplementedError
 
         elif message.message_type == MessageType.CLAIM_LEADER_PING:
             # Check if another node made a claim of being a leader in previous 5s
             # If so, initiate another election.
             # Otherwise, acknowledge sender as leader
-            pass
+            raise NotImplementedError
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
@@ -304,7 +369,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
-            raise NotImplementedError
+            self.server.logger.info(f"Received GET request for {message.file_name}")
+            self._process_get(message)
 
         # handle DELETE for file store
         elif message.message_type == MessageType.DELETE:
@@ -342,3 +408,11 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # deserialize the message
         received_message = get_message_from_bytes(data)
         self._process_message(received_message)
+
+    def get_election_timestamp(self) -> int:
+        with self.election_lock:
+            return self.election_timestamp
+
+    def update_election_timestamp(self) -> None:
+        with self.election_lock:
+            self.election_timestamp = time.time()

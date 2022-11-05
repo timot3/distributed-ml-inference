@@ -351,7 +351,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def send_ls(self) -> None:
+    def send_ls(self, display_res=True) -> Dict[Member, Any]:
         """
         Send a LS message to all neighbors
         :return: None
@@ -360,9 +360,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
         )
         res = self.broadcast_to(ls_message, self.membership_list, recv=True)
-        for member, message in res.items():
-            files_str = ", ".join(str(file) for file in message.files)
-            print(f"{member}: {files_str}")
+        if display_res:
+            for member, message in res.items():
+                files_str = ", ".join(str(file) for file in message.files)
+                print(f"{member}: {files_str}")
+
+        return res
 
     def get_file_store(self) -> FileStore:
         """

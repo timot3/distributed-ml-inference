@@ -242,6 +242,15 @@ class LSMessage(Message):
         return f"LSMessage({msg_type}, files={self.files})"
 
 
+class FileMessage(Message):
+    def __init__(
+        self,
+    ):
+        super.__init__(self, message_type, ip, port, timestamp)
+
+    pass
+
+
 class Member:
     def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = None):
         self.ip: str = ip
