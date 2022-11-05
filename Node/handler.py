@@ -92,84 +92,91 @@ class NodeHandler(socketserver.BaseRequestHandler):
         :return: None
         """
 
-        if self.server.is_introducer:
-            # choose REPLICATION_LEVEL nodese
-            # store the file on those nodes
-            membership_list_size = len(self.server.membership_list)
-            replication_factor = get_replication_level(
-                membership_list_size, REPLICATION_LEVEL
-            )
-            nodes_to_store = random.sample(
-                self.server.membership_list, replication_factor
-            )
-            tried_nodes = []
-
-            while replication_factor > 0:
-                # send the file to the nodes
-                # first, check if self.server.member in nodes_to_store
-                # if so, store the file locally
-                num_successes = 0
-
-                if self.server.member in nodes_to_store:
-                    self.server.logger.info("Storing file locally")
-                    self.server.file_store.put_file(message.file_name, message.data)
-                    nodes_to_store.remove(self.server.member)
-                    replication_factor -= 1
-                    num_successes += 1
-
-                # send the file to the nodes
-                results: dict = self.server.broadcast_to(message, nodes_to_store)
-                # count the number of failures
-                num_successes = list(results.values()).count(True)
-                replication_factor -= num_successes
-
-                if replication_factor > 0:
-                    self.server.logger.warning(
-                        f"Failed to store file on {replication_factor} nodes"
-                    )
-                    self.server.logger.warning(
-                        f"Trying again with {replication_factor} nodes"
-                    )
-                    # choose REPLICATION_LEVEL - num_failures nodes
-                    # that are not in tried_nodes
-                    chosen_node_cnt = replication_factor
-                    # clear nodes_to_store
-                    nodes_to_store.clear()
-
-                    while chosen_node_cnt > 0:
-                        node = random.choice(self.server.membership_list)
-                        if node not in tried_nodes:
-                            nodes_to_store.append(node)
-                            tried_nodes.append(node)
-                            chosen_node_cnt -= 1
-
-            # send a response to the client
-            # get the file that was inserted
-            new_file = self.server.file_store.get_file(message.file_name)
-            client_ack_message = FileMessage(
-                MessageType.FILE_ACK,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                new_file.file_name,
-                new_file.version,
-                b"",  # no data -- this is an ack
-            )
-
-            self.server.logger.info(f"Replying with {client_ack_message}")
-            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
-
-        else:
+        if not self.server.is_introducer:
             # store the file locally
             self.server.file_store.put_file(message.file_name, message.data)
+            return
 
-    def _process_get(self, message: FileMessage) -> None:
-        """
-        Process a GET message and send the file
-        :param message: The received message
-        :return: None
-        """
-        pass
+        # choose REPLICATION_LEVEL nodese
+        # store the file on those nodes
+        membership_list_size = len(self.server.membership_list)
+        replication_factor = get_replication_level(
+            membership_list_size, REPLICATION_LEVEL
+        )
+        nodes_to_store = random.sample(self.server.membership_list, replication_factor)
+        tried_nodes = []
+
+        while replication_factor > 0:
+            # send the file to the nodes
+            # first, check if self.server.member in nodes_to_store
+            # if so, store the file locally
+            num_successes = 0
+
+            if self.server.member in nodes_to_store:
+                self.server.logger.info("Storing file locally")
+                self.server.file_store.put_file(message.file_name, message.data)
+                nodes_to_store.remove(self.server.member)
+
+                # update self's files in the membership list
+                self.member.files.add(message.file_name)
+
+                replication_factor -= 1
+                num_successes += 1
+
+            # send the file to the nodes
+            results: Dict[Member, Any] = self.server.broadcast_to(message, nodes_to_store)
+            # count the number of failures
+            # num_successes = list(results.values()).count(True)
+
+            # get the nodes that were successful and add the file to them
+            for node, success in results.items():
+                if success:
+                    self.server.logger.info(f"Storing file on {node.ip}:{node.port}")
+                    # find the node in the membership list
+                    # and update the files that it has
+                    node_member = self.server.membership_list.get_machine(node)
+                    node_member.files.add(message.file_name)
+                    replication_factor -= 1
+
+            if replication_factor > 0:
+                self.server.logger.warning(
+                    f"Failed to store file on {replication_factor} nodes"
+                )
+                self.server.logger.warning(
+                    f"Trying again with {replication_factor} nodes"
+                )
+                # choose REPLICATION_LEVEL - num_failures nodes
+                # that are not in tried_nodes
+                chosen_node_cnt = replication_factor
+                # clear nodes_to_store
+                nodes_to_store.clear()
+
+                while chosen_node_cnt > 0:
+                    node = random.choice(self.server.membership_list)
+                    if node not in tried_nodes:
+                        nodes_to_store.append(node)
+                        tried_nodes.append(node)
+                        chosen_node_cnt -= 1
+
+        # send a response to the client
+        # get the file that was inserted
+        new_file = self.server.file_store.get_file(message.file_name)
+        client_ack_message = FileMessage(
+            MessageType.FILE_ACK,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            new_file.file_name,
+            new_file.version,
+            b"",  # no data -- this is an ack
+        )
+
+        self.server.logger.info(f"Replying with {client_ack_message}")
+        self.request.sendall(add_len_prefix(client_ack_message.serialize()))
+
+        # DEBUGGING PURPOSES: Print the membership list --> files that each node has
+        for member in self.server.membership_list:
+            self.server.logger.info(f"{member} has {member.files}")
 
     def _process_delete(self, message: FileMessage) -> None:
         """
@@ -207,52 +214,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         # send an LS to all other nodes
         # and get the latest version of the file
-
-        ls_resp = self.server.send_ls()
-        latest_version = -1
-        latest_version_node = None
-
-        for node, files in ls_resp.items():
-            for file in files:
-                if file.file_name == message.file_name:
-                    if file.version > latest_version:
-                        latest_version = file.version
-                        latest_version_node = node
-
-        if latest_version_node is None:
-            self.server.logger.info("File not found")
-            # send a response to the client
-            client_ack_message = FileMessage(
-                MessageType.GET,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                message.file_name,
-                -1,
-                b"",
-            )
-
-            self.server.logger.info(f"Replying with {client_ack_message}")
-            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
-
-        else:
-            # file found!
-            # send a GET to the client with the latest version
-            latest_file = latest_version_node.file_store.get_latest_version(
-                message.file_name
-            )
-            client_ack_message = FileMessage(
-                MessageType.GET,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                latest_file.file_name,
-                latest_file.version,
-                latest_file.data,
-            )
-
-            self.server.logger.info(f"Replying with {client_ack_message}")
-            self.request.sendall(add_len_prefix(client_ack_message.serialize()))
 
     def _process_message(self, message) -> None:
         """
@@ -342,16 +303,23 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # No need for a different type of message to initiate election compared to
             # sending election messages to lower id nodes (action is exactly the same in
             # Bully algorithm for elections)
+            raise NotImplementedError
             # Find everyone in membership list
+            members = self.server.get_membership_list()
 
             # Send to all others in membership list with lower id
-            # Wait for n seconds e.g. 5 seconds
+            # Wait for a short while
+            self.update_election_timestamp()
             time.sleep(ELECT_LEADER_TIMEOUT)
             # No replies - declare leader
             if time.time() - self.get_election_timestamp() >= ELECT_LEADER_TIMEOUT:
-                # self.server.broadcast_to(Message(), self.server.get_membership_list())
-                pass
-            raise NotImplementedError
+                claim_message = Message(
+                    MessageType.CLAIM_LEADER_PING,
+                    self.server.host,
+                    self.server.port,
+                    self.server.timestamp,
+                )
+                self.server.broadcast_to(claim_message, self.server.get_membership_list())
 
         elif message.message_type == MessageType.CLAIM_LEADER_ACK:
             raise NotImplementedError

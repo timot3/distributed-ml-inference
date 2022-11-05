@@ -1,7 +1,7 @@
 import socket
 import struct
 from enum import IntEnum
-from typing import List, Any, Optional
+from typing import List, Any, Optional, Set
 import logging
 from threading import Lock
 
@@ -242,13 +242,15 @@ class LSMessage(Message):
         return f"LSMessage({msg_type}, files={self.files})"
 
 
-class FileMessage(Message):
+class ElectionMessage(Message):
     def __init__(
         self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
     ):
         super.__init__(self, message_type, ip, port, timestamp)
-
-    pass
 
 
 class Member:
@@ -256,6 +258,7 @@ class Member:
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
+        self.files: Set(str) = set()
 
         if last_heartbeat is None:
             self.last_heartbeat = timestamp
@@ -274,6 +277,12 @@ class Member:
             and self.port == other.port
             and self.timestamp == other.timestamp
         )
+
+    def __lt__(self, other):
+        if self.timestamp == other.timestamp:
+            # tiebreak
+            return self.ip < other.ip
+        return self.timestamp < other.timestamp
 
     def __hash__(self):
         return hash((self.ip, self.port, self.timestamp))
