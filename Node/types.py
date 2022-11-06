@@ -360,7 +360,7 @@ class Member:
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
-        self.files: Set(str) = set()
+        self.files: Set[str] = set()
 
         if last_heartbeat is None:
             self.last_heartbeat = timestamp
@@ -459,10 +459,10 @@ class MembershipList(list):
         return None
 
     def find_machines_with_file(self, file_name: str) -> List[Member]:
-        print(self)
         machines = []
         for m in self:
             if file_name in m.files:
+                print(f"Found machine with file: {m}")
                 machines.append(m)
         return machines
 
@@ -476,6 +476,10 @@ class MembershipList(list):
     def __str__(self):
         members = [str(member) for member in self]
         return f"MembershipList({', '.join(members)})"
+
+    def __sub__(self, other):
+        # return a new membership list with the members that are not in the other
+        return MembershipList([member for member in self if member not in other])
 
     def serialize(self):
         # ip address and port and timestamp are separated by a colon

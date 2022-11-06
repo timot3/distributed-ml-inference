@@ -25,6 +25,7 @@ from .types import (
     DnsDaemonPortID,
     VM1_URL,
     MembershipListMessage,
+    FileMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -399,21 +400,16 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         # we need tof ind the files in the membership lsit
         # and then rereplicate them
-
+        adjusted_membership_list = self.membership_list - [member]
         leaving_member = self.membership_list.get_machine(member)
         files_on_member = leaving_member.files
 
         # print al the files
-        print(self.membership_list.get_files_on_all_str())
-
-        print(files_on_member)
         # get the nodes that have the file
         for file_name in files_on_member:
             # choose two unique nodes from membership list
             # one that has the file and one that does not
-            nodes_with_file = self.membership_list.find_machines_with_file(
-                files_on_member
-            )
+            nodes_with_file = self.membership_list.find_machines_with_file(file_name)
             machines_without_file = self.membership_list.find_machines_without_file(
                 file_name
             )
@@ -421,14 +417,29 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 # we cannot rereplicate the file
                 continue
 
-            print(f"Nodes with file: {nodes_with_file}")
-            print(f"Nodes without file: {machines_without_file}")
             member_with_file = random.choice(nodes_with_file)
             member_without_file = random.choice(machines_without_file)
 
             print(
                 f"Chose {member_with_file} to send {file_name} to {member_without_file}"
             )
+            # if the member with the file is the introducer, then we need to send the file
+            # to the member without the file
+            if member_with_file.is_same_machine_as(self.member):
+                # construct PUT message with file
+                file = self.file_store.get_file(file_name)
+                put_message = FileMessage(
+                    MessageType.PUT,
+                    self.member.ip,
+                    self.member.port,
+                    self.member.timestamp,
+                    file.file_name,
+                    file.file_content,
+                    file.version,
+                )
+                self._send(put_message, member_without_file)
+                print(f"Sent {file_name} to {member_without_file}")
+                return
 
             # send a FileReplicationMessage to the node that has the file
             # so that it can send the file to the node that does not have the file
@@ -444,6 +455,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             )
 
             print("Broadcasting file replication message")
+
             resp = self.broadcast_to(
                 file_replication_message, [member_with_file], recv=True
             )
@@ -465,7 +477,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if self.is_introducer:
             print(in_red("REREPLICATING FILES"))
             self._rereplicate_files(leaving_member)
-        self.membership_list.remove(leaving_member)
+
+        if leaving_member in self.membership_list:
+            self.membership_list.remove(leaving_member)
         self.broadcast_to_neighbors(message)
 
     def get_self_id(self) -> int:

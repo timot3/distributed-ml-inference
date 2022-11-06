@@ -500,6 +500,9 @@ class NodeHandler(socketserver.BaseRequestHandler):
         elif message.message_type == MessageType.LS:
             self._process_ls(message)
 
+        elif message.message_type == MessageType.FILE_REPLICATION_REQUEST:
+            self._process_file_replication_request(message)
+
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
 
@@ -532,3 +535,42 @@ class NodeHandler(socketserver.BaseRequestHandler):
     def update_election_timestamp(self) -> None:
         with self.election_lock:
             self.election_timestamp = time.time()
+
+    def _process_file_replication_request(self, message: FileReplicationMessage) -> None:
+        # get the file from the file store
+        file = self.server.file_store.get_file(message.file_name)
+        if file is None:
+            self.server.logger.critical(
+                f"File {message.file_name} not found in file store"
+            )
+            return
+
+        # send the file to the node in the to_ip and to_port
+        self.server.logger.info(
+            f"Sending file {message.file_name} to {message.ip}:{message.port}"
+        )
+        # construct PUT message
+        put_message = FileMessage(
+            MessageType.PUT,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            file.file_name,
+            file.version,
+            file.file_content,
+        )
+        # send the message
+        self._send(put_message, (message.ip, message.port))
+        # reply with FILE_REPLICATION_ACK
+        ack_message = FileReplicationMessage(
+            MessageType.FILE_REPLICATION_ACK,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+            message.file_name,
+            message.ip,
+            message.port,
+            message.timestamp,
+        )
+
+        self.request.sendall(add_len_prefix(ack_message.serialize()))

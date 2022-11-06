@@ -11,6 +11,7 @@ from Node.types import (
     Message,
     FileMessage,
     MembershipListMessage,
+    FileReplicationMessage,
 )
 
 
@@ -69,6 +70,18 @@ def is_ls_message(message_type: int) -> bool:
     :return: True if the message is a ls message, False otherwise
     """
     return message_type == MessageType.LS
+
+
+def is_file_replication_message(message_type: int) -> bool:
+    """
+    Checks if the message is a file replication message
+    :param message_type: the message type
+    :return: True if the message is a file replication message, False otherwise
+    """
+    return (
+        message_type == MessageType.FILE_REPLICATION_REQUEST
+        or message_type == MessageType.FILE_REPLICATION_ACK
+    )
 
 
 def in_red(text):
@@ -201,10 +214,10 @@ def get_message_from_bytes(data: bytes) -> Message:
         raise NotImplementedError
         # future work
         # return ElectionMessage.deserialize(data)
+    elif is_file_replication_message(message_type):
+        return FileReplicationMessage.deserialize(data)
     else:
-        return LSMessage.deserialize(data)
-
-        # raise ValueError("Invalid message type")
+        raise ValueError("Invalid message type")
 
 
 # Useful for displaying/debugging purposes, not used for functionality
