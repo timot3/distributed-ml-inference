@@ -116,7 +116,7 @@ if __name__ == "__main__":
     puts = []
     gets = []
     alphabet = "abcdefghijklmnopqrstuvwxyz"
-    for i in range(len(alphabet)):
+    for i in range(5):
         puts.append(["put", "testfiles/numbers.txt", f"{alphabet[i]}.txt"])
         gets.append(["get", f"{alphabet[i]}.txt", f"testfiles/res_{alphabet[i]}.txt"])
 

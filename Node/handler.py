@@ -1,3 +1,23 @@
+"""This file does most of the heavy lifting for the entirety of the
+SDFS system. It is responsible for handling all the messages that are
+sent to the node.
+
+Much of this code is divided based on whether or not the node is an
+Introducer(leader). The introducer is responsible for mainaining the
+file system in a central way. That way, if it detects a node failure,
+it can reassign the files that were stored on that node to other nodes.
+
+Communication with other nodes is handled with the `broadcast_to(message, nodes)`
+function, which lives in the `Node` class. This function is responsible for
+sending a message to all the nodes in the `nodes` list.
+
+Raises:
+    ConnectionError: If the node cannot connect to who it is trying to send a message to.
+    NotImplementedError: If this component of the handler is a WIP
+    ValueError: If the message type is not recognized
+"""
+
+
 import socketserver
 import socket
 import time
@@ -9,6 +29,7 @@ from threading import Lock
 from FileStore.FileStore import File
 from .types import (
     REPLICATION_LEVEL,
+    FileReplicationMessage,
     LSMessage,
     MessageType,
     Message,
@@ -19,6 +40,7 @@ from .types import (
     FileMessage,
     MembershipListMessage,
     ELECT_LEADER_TIMEOUT,
+    TransferFile,
 )
 from .utils import (
     add_len_prefix,
@@ -185,7 +207,23 @@ class NodeHandler(socketserver.BaseRequestHandler):
         :param message: The received message
         :return: None
         """
-        pass
+        if self.server.is_introducer:
+            # get the nodes that have the file
+            nodes_to_delete = self.server.membership_list.get_nodes_with_file(
+                message.file_name
+            )
+            if self.server.member in nodes_to_delete:
+                self.server.logger.info("Deleting file locally")
+                self.server.file_store.delete_file(message.file_name)
+                nodes_to_delete.remove(self.server.member)
+
+                # update self's files in the membership list
+                self.server.member.files.remove(message.file_name)
+            # broadcast the delete message to the nodes
+            self.server.broadcast_to(message, nodes_to_delete)
+        else:
+            # delete the file locally
+            self.server.file_store.delete_file(message.file_name)
 
     def _process_ls(self, message: FileMessage) -> None:
         """
@@ -276,7 +314,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # get the latest version of the file
 
         for member, message in resp.items():
-            print(f"Received {message} from {member}")
             if message.message_type == MessageType.FILE_ACK:
                 if message.version >= latest_file.version and message.data != b"":
                     latest_file = File(message.file_name, message.data, message.version)
@@ -372,18 +409,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle LEAVE
         elif message.message_type == MessageType.LEAVE:
-            leaving_member = Member(message.ip, message.port, message.timestamp)
-
-            self.server.logger.info(
-                in_blue(f"Received LEAVE message from {leaving_member}")
-            )
-            if leaving_member not in self.server.membership_list:
-                self.server.logger.info(
-                    "Machine {} not found in membership list".format(leaving_member)
-                )
-                return
-            self.server.membership_list.remove(leaving_member)
-            self.server.broadcast_to_neighbors(message)
+            member = Member(message.ip, message.port, message.timestamp)
+            self.server.process_leave(message, member)
 
         # handle DISCONNECTED
         elif message.message_type == MessageType.DISCONNECTED:
@@ -462,7 +489,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle DELETE for file store
         elif message.message_type == MessageType.DELETE:
-            raise NotImplementedError
+            self.server.logger.info(f"Received DELETE request for {message.file_name}")
+            self._process_delete(message)
 
         elif message.message_type == MessageType.FILE_ACK:
             # construct member from message

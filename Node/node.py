@@ -14,6 +14,7 @@ import random
 from FileStore.FileStore import File, FileStore
 from Node.handler import NodeHandler
 from .types import (
+    FileReplicationMessage,
     LSMessage,
     MessageType,
     Message,
@@ -28,6 +29,7 @@ from .types import (
 from .utils import (
     add_len_prefix,
     get_self_ip_and_port,
+    in_blue,
     in_red,
     trim_len_prefix,
     get_message_from_bytes,
@@ -246,6 +248,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                         f"Failed to notify {member} of their failure, meaning they are dead. Notifying neighbors..."
                     )
                     # remove the failed member from the membership list
+                    if self.is_introducer:
+                        # replicate files
+                        self._rereplicate_files(member)
                     self.membership_list.remove(member)
                     leave_message = Message(
                         MessageType.LEAVE, member.ip, member.port, member.timestamp
@@ -383,6 +388,85 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :return: membership_list as a MembershipList object
         """
         return self.membership_list
+
+    def _rereplicate_files(self, member: Member) -> None:
+        """If the node is the introducer, then we want to
+        Rereplicate the files that the node had onto the other nodes
+
+        Args:
+            member (Member): The member that left
+
+        """
+        # we need tof ind the files in the membership lsit
+        # and then rereplicate them
+
+        leaving_member = self.membership_list.get_machine(member)
+        files_on_member = leaving_member.files
+
+        # print al the files
+        print(self.membership_list.get_files_on_all_str())
+
+        print(files_on_member)
+        # get the nodes that have the file
+        for file_name in files_on_member:
+            # choose two unique nodes from membership list
+            # one that has the file and one that does not
+            nodes_with_file = self.membership_list.find_machines_with_file(
+                files_on_member
+            )
+            machines_without_file = self.membership_list.find_machines_without_file(
+                file_name
+            )
+            if len(machines_without_file) == 0 or len(nodes_with_file) == 0:
+                # we cannot rereplicate the file
+                continue
+
+            print(f"Nodes with file: {nodes_with_file}")
+            print(f"Nodes without file: {machines_without_file}")
+            member_with_file = random.choice(nodes_with_file)
+            member_without_file = random.choice(machines_without_file)
+
+            print(
+                f"Chose {member_with_file} to send {file_name} to {member_without_file}"
+            )
+
+            # send a FileReplicationMessage to the node that has the file
+            # so that it can send the file to the node that does not have the file
+            file_replication_message = FileReplicationMessage(
+                MessageType.FILE_REPLICATION_REQUEST,
+                member_without_file.ip,
+                member_without_file.port,
+                member_without_file.timestamp,
+                file_name,
+                member_with_file.ip,
+                member_with_file.port,
+                member_with_file.timestamp,
+            )
+
+            print("Broadcasting file replication message")
+            resp = self.broadcast_to(
+                file_replication_message, [member_with_file], recv=True
+            )
+            print(resp)
+
+    def process_leave(self, message, leaving_member: Member) -> None:
+        """
+        Process a leave message
+        :param member: the member that left
+        :return: None
+        """
+
+        self.logger.info(in_blue(f"Received LEAVE message from {leaving_member}"))
+        if leaving_member not in self.membership_list:
+            self.logger.info(
+                "Machine {} not found in membership list".format(leaving_member)
+            )
+            return
+        if self.is_introducer:
+            print(in_red("REREPLICATING FILES"))
+            self._rereplicate_files(leaving_member)
+        self.membership_list.remove(leaving_member)
+        self.broadcast_to_neighbors(message)
 
     def get_self_id(self) -> int:
         """
