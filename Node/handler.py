@@ -245,7 +245,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         self.server.logger.info(f"Replying with {file_list_message}")
         self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
-    def _process_get(self, message) -> None:
+    def _process_get(self, message, versions=None) -> None:
         """
         Process a GET message and send the file
         :param message: The received message
@@ -256,22 +256,36 @@ class NodeHandler(socketserver.BaseRequestHandler):
         # then reply with the latest version of the file
         # if the file is not found, reply with an error message
 
+        if versions is None:
+            versions = []
+
         if not self.server.is_introducer:
             # if we are not the introducer, we reply only if we have the file
-            my_file = self.server.file_store.get_file(message.file_name)
-            if my_file is not None:
-                # reply with the file
-                file_message = FileMessage(
-                    MessageType.FILE_ACK,
-                    self.server.host,
-                    self.server.port,
-                    self.server.timestamp,
-                    message.file_name,
-                    my_file.version,
-                    my_file.file_content,
+            # if len(versions) == 0, then get the latest version
+            # otherwise, get the version specified
+            files_to_send = []
+            if len(versions) == 0:
+                file = self.server.file_store.get_file(message.file_name)
+                files_to_send.append(file)
+            else:
+                files_to_send = self.server.file_store.get_file_versions(
+                    message.file_name, versions
                 )
-                self.request.sendall(add_len_prefix(file_message.serialize()))
-                return
+
+            for my_file in files_to_send:
+                if my_file is not None:
+                    # reply with the file
+                    file_message = FileMessage(
+                        MessageType.FILE_ACK,
+                        self.server.host,
+                        self.server.port,
+                        self.server.timestamp,
+                        message.file_name,
+                        my_file.version,
+                        my_file.file_content,
+                    )
+                    self.request.sendall(add_len_prefix(file_message.serialize()))
+            return
 
         # if we are the introducer, we need to contact all the nodes
         # that have the file
@@ -486,6 +500,12 @@ class NodeHandler(socketserver.BaseRequestHandler):
         elif message.message_type == MessageType.GET:
             self.server.logger.info(f"Received GET request for {message.file_name}")
             self._process_get(message)
+
+        elif message.message_type == MessageType.GET_VERSIONS:
+            self.server.logger.info(
+                f"Received GET_VERSIONS request for {message.file_name}"
+            )
+            self._process_get(message, versions=message.versions)
 
         # handle DELETE for file store
         elif message.message_type == MessageType.DELETE:

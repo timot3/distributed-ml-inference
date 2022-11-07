@@ -12,76 +12,8 @@ from Node.nodetypes import (
     FileMessage,
     MembershipListMessage,
     FileReplicationMessage,
+    FileVersionMessage,
 )
-
-
-def is_membership_message(message_type: int) -> bool:
-    return message_type == MessageType.MEMBERSHIP_LIST
-
-
-def is_communication_message(message_type: int) -> bool:
-    """
-    Checks if the message is a communication message
-    :param message_type: the message type
-    :return: True if the message is a communication message, False otherwise
-    """
-    return (
-        message_type == MessageType.NEW_NODE
-        or message_type == MessageType.JOIN
-        or message_type == MessageType.LEAVE
-        or message_type == MessageType.PING
-        or message_type == MessageType.PONG
-    )
-
-
-def is_election_message(message_type: int) -> bool:
-    """
-    Checks if the message is an election message
-    :param message_type: the message type
-    :return: True if the message is an election message, False otherwise
-    """
-    # future work
-    return (
-        message_type == MessageType.ELECT_PING
-        or message_type == MessageType.CLAIM_LEADER_PING
-        or message_type == MessageType.CLAIM_LEADER_ACK
-    )
-
-
-def is_filestore_message(message_type: int) -> bool:
-    """
-    Checks if the message is a filestore message
-    :param message_type: the message type
-    :return: True if the message is a filestore message, False otherwise
-    """
-    return (
-        message_type == MessageType.PUT
-        or message_type == MessageType.GET
-        or message_type == MessageType.DELETE
-        or message_type == MessageType.FILE_ACK
-        or message_type == MessageType.FILE_ERROR
-    )
-
-
-def is_ls_message(message_type: int) -> bool:
-    """
-    Checks if the message is a ls message
-    :param message_type: the message type
-    :return: True if the message is a ls message, False otherwise
-    """
-    return message_type == MessageType.LS
-
-
-def is_file_replication_message(message_type: int) -> bool:
-    """
-    Checks if the message is a file replication message
-    :param message_type: the message type
-    :return: True if the message is a file replication message, False otherwise
-    """
-    return (
-        message_type == MessageType.FILE_REPLICATION_REQUEST
-        or message_type == MessageType.FILE_REPLICATION_ACK
-    )
 
 
 def in_red(text):
@@ -185,6 +117,79 @@ def timed_out(timestamp, timeout):
     return time.time() - timestamp > timeout
 
 
+def is_membership_message(message_type: int) -> bool:
+    return message_type == MessageType.MEMBERSHIP_LIST
+
+
+def is_communication_message(message_type: int) -> bool:
+    """
+    Checks if the message is a communication message
+    :param message_type: the message type
+    :return: True if the message is a communication message, False otherwise
+    """
+    return (
+        message_type == MessageType.NEW_NODE
+        or message_type == MessageType.JOIN
+        or message_type == MessageType.LEAVE
+        or message_type == MessageType.PING
+        or message_type == MessageType.PONG
+    )
+
+
+def is_election_message(message_type: int) -> bool:
+    """
+    Checks if the message is an election message
+    :param message_type: the message type
+    :return: True if the message is an election message, False otherwise
+    """
+    # future work
+    return (
+        message_type == MessageType.ELECT_PING
+        or message_type == MessageType.CLAIM_LEADER_PING
+        or message_type == MessageType.CLAIM_LEADER_ACK
+    )
+
+
+def is_filestore_message(message_type: int) -> bool:
+    """
+    Checks if the message is a filestore message
+    :param message_type: the message type
+    :return: True if the message is a filestore message, False otherwise
+    """
+    return (
+        message_type == MessageType.PUT
+        or message_type == MessageType.GET
+        or message_type == MessageType.DELETE
+        or message_type == MessageType.FILE_ACK
+        or message_type == MessageType.FILE_ERROR
+    )
+
+
+def is_ls_message(message_type: int) -> bool:
+    """
+    Checks if the message is a ls message
+    :param message_type: the message type
+    :return: True if the message is a ls message, False otherwise
+    """
+    return message_type == MessageType.LS
+
+
+def is_file_replication_message(message_type: int) -> bool:
+    """
+    Checks if the message is a file replication message
+    :param message_type: the message type
+    :return: True if the message is a file replication message, False otherwise
+    """
+    return (
+        message_type == MessageType.FILE_REPLICATION_REQUEST
+        or message_type == MessageType.FILE_REPLICATION_ACK
+    )
+
+
+def is_fileversion_message(message_type: int) -> bool:
+    return message_type == MessageType.GET_VERSIONS or message_type == MessageType.GET
+
+
 def get_message_from_bytes(data: bytes) -> Message:
     """
     Factory method to get either a Message, FileStoreMessage, or ElectionMessage
@@ -204,18 +209,25 @@ def get_message_from_bytes(data: bytes) -> Message:
 
     if is_communication_message(message_type):
         return Message.deserialize(data)
+
     elif is_filestore_message(message_type):
         return FileMessage.deserialize(data)
+
+    elif is_fileversion_message(message_type):
+        return FileVersionMessage.deserialize(data)
+
     elif is_ls_message(message_type):
         return LSMessage.deserialize(data)
+
     elif is_membership_message(message_type):
         return MembershipListMessage.deserialize(data)
+
     elif is_election_message(message_type):
         raise NotImplementedError
-        # future work
-        # return ElectionMessage.deserialize(data)
+
     elif is_file_replication_message(message_type):
         return FileReplicationMessage.deserialize(data)
+
     else:
         raise ValueError("Invalid message type")
 

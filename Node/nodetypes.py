@@ -46,16 +46,17 @@ class MessageType(IntEnum):
     # FileStore messages
     PUT = 9
     GET = 10
-    DELETE = 11
-    FILE_ACK = 12
-    LS = 13
-    FILE_ERROR = 14
-    FILE_REPLICATION_REQUEST = 15
-    FILE_REPLICATION_ACK = 16
+    GET_VERSIONS = 11
+    DELETE = 12
+    FILE_ACK = 13
+    LS = 14
+    FILE_ERROR = 15
+    FILE_REPLICATION_REQUEST = 16
+    FILE_REPLICATION_ACK = 17
 
     # Membership messages
-    NEW_NODE = 17
-    MEMBERSHIP_LIST = 18
+    NEW_NODE = 18
+    MEMBERSHIP_LIST = 19
 
 
 # PORT IDs
@@ -67,6 +68,7 @@ class DnsDaemonPortID(IntEnum):
 INTRODUCER_PORT = 8789
 
 VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
+
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
 class bcolors:
@@ -302,6 +304,63 @@ class FileReplicationMessage(Message):
     def __str__(self):
         msg_type = MessageType(self.message_type).name
         return f"FileReplicationMessage({msg_type}, file_name={self.file_name}, from_ip={self.from_ip}, from_port={self.from_port}, from_timestamp={self.from_timestamp})"
+
+
+class FileVersionMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        file_name: str,
+        versions: List[int],
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.file_name = file_name
+        self.versions = versions
+
+    def serialize(self):
+        base_message = super().serialize()
+        # pack the filename into a 32 byte string using struct.pack
+        file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
+
+        # pack the number of versions into a 4 byte int using struct.pack
+        num_versions = struct.pack(">I", len(self.versions))
+
+        # pack the versions into a byte string using struct.pack
+        versions = struct.pack(f">{len(self.versions)}I", *self.versions)
+
+        # finally, append all the bytes together
+        return base_message + file_name + num_versions + versions
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        base_size = communication_struct.size
+
+        min_size = base_size + (32 + 4)
+        if len(data) < min_size:
+            raise ValueError("Invalid message")
+
+        # get the message type
+        # the first 14 bytes are the same as the communication message
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # get the filename
+        file_name = struct.unpack(">32s", data[base_size : base_size + 32])[0]
+        file_name = file_name.decode("utf-8").strip("\x00")
+
+        # get the number of versions
+        num_versions = struct.unpack(">I", data[base_size + 32 : base_size + 36])[0]
+
+        # get the versions
+        versions = struct.unpack(f">{num_versions}I", data[base_size + 36 :])[0]
+
+        return cls(message_type, ip, port, timestamp, file_name, versions)
 
 
 class LSMessage(Message):
