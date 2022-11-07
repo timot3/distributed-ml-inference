@@ -71,7 +71,7 @@ def make_file_version_message(
     )
 
 
-def send_file_message(ip, port, file_message: Message):
+def send_file_message(ip, port, file_message: Message, recv=True):
     """
     Sends a filestore message to the ip and port
     :param ip: the ip to send the message to
@@ -82,9 +82,11 @@ def send_file_message(ip, port, file_message: Message):
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((ip, port))
         sock.sendall(add_len_prefix(file_message.serialize()))
-        data = recvall(sock)
-    file_message = get_message_from_bytes(data)
-    return file_message
+        if recv:
+            data = recvall(sock)
+    if recv:
+        file_message = get_message_from_bytes(data)
+        return file_message
 
 
 def _get_filestore_command() -> List[str]:
@@ -131,9 +133,11 @@ def get_filestore_command(host, port, command=None):
         print("Done writing file")
 
     elif command[0] == "delete":
-        command_message = make_file_message(b"", MessageType.DELETE, host, port)
-        response = send_file_message(host, port, command_message)
-        print(response)
+        command_message = make_file_message(
+            b"", command[1], MessageType.DELETE, host, port
+        )
+        send_file_message(host, port, command_message, recv=False)
+        print("Done")
 
     else:
         print("Invalid command")

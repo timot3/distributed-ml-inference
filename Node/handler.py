@@ -370,16 +370,28 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # reply with the file
         latest_file = resp[member_with_latest_version]
-        file_message = FileMessage(
-            MessageType.FILE_ACK,
-            self.server.host,
-            self.server.port,
-            self.server.timestamp,
-            message.file_name,
-            latest_file.version,
-            latest_file.data,
-        )
-        self.request.sendall(add_len_prefix(file_message.serialize()))
+        if latest_file is not None:
+            file_message = FileMessage(
+                MessageType.FILE_ACK,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                latest_file.version,
+                latest_file.data,
+            )
+            self.request.sendall(add_len_prefix(file_message.serialize()))
+        else:
+            error_message = FileMessage(
+                MessageType.FILE_ERROR,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                0,
+                b"",
+            )
+            self.request.sendall(add_len_prefix(error_message.serialize()))
 
     def _process_message(self, message) -> None:
         """
