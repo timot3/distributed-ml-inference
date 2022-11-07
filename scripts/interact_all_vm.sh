@@ -21,4 +21,7 @@ do
     STR=$(echo "$PYSTR" | python3)
     ssh -i ~/.ssh/cs425 $STR "echo \"PASSWORD HERE\" | sudo -S yum install python39 -y"
     ssh -i ~/.ssh/cs425 $STR "python3.9 -m pip install rpyc" &
+
 done
+
+echo "Done!"
