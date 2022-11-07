@@ -40,7 +40,7 @@ from .nodetypes import (
     FileMessage,
     MembershipListMessage,
     ELECT_LEADER_TIMEOUT,
-    TransferFile,
+    FileVersionMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -142,7 +142,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 nodes_to_store.remove(self.server.member)
 
                 # update self's files in the membership list
-                self.server.member.files.add(message.file_name)
+                self.server.member.files.put_file(message.file_name, b"")
 
                 replication_factor -= 1
                 num_successes += 1
@@ -159,7 +159,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                     # find the node in the membership list
                     # and update the files that it has
                     node_member = self.server.membership_list.get_machine(node)
-                    node_member.files.add(message.file_name)
+                    node_member.files.put_file(message.file_name, b"")
                     replication_factor -= 1
 
             if replication_factor > 0:
@@ -209,7 +209,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         if self.server.is_introducer:
             # get the nodes that have the file
-            nodes_to_delete = self.server.membership_list.get_nodes_with_file(
+            nodes_to_delete = self.server.membership_list.find_machines_with_file(
                 message.file_name
             )
             if self.server.member in nodes_to_delete:
@@ -218,7 +218,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 nodes_to_delete.remove(self.server.member)
 
                 # update self's files in the membership list
-                self.server.member.files.remove(message.file_name)
+                self.server.member.files.delete_file(message.file_name)
             # broadcast the delete message to the nodes
             self.server.broadcast_to(message, nodes_to_delete)
         else:
@@ -306,37 +306,55 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
             self.request.sendall(add_len_prefix(error_message.serialize()))
             return
-        # send a request to all the nodes that have the file
-        # construct the GET message
-        get_message = FileMessage(
+
+        # find the member with the latest version
+        (
+            member_with_latest_version,
+            version,
+        ) = self.server.membership_list.find_machine_with_latest_version(
+            message.file_name
+        )
+        if member_with_latest_version is None:
+            error_message = FileMessage(
+                MessageType.FILE_ERROR,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                0,
+                b"",
+            )
+            self.request.sendall(add_len_prefix(error_message.serialize()))
+            return
+
+        # if we have the latest version, send it
+        if self.server.member == member_with_latest_version:
+            # get the file
+            latest_file = self.server.file_store.get_file(message.file_name)
+            file_message = FileMessage(
+                MessageType.FILE_ACK,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.file_name,
+                latest_file.version,
+                latest_file.file_content,
+            )
+            self.request.sendall(add_len_prefix(file_message.serialize()))
+            return
+
+        # request the latest version
+        get_message = FileVersionMessage(
             MessageType.GET,
             self.server.host,
             self.server.port,
             self.server.timestamp,
             message.file_name,
-            0,
-            b"",
+            [version],
         )
-        latest_file: File = None
-        if self.server.member in nodes_with_file:
-            latest_file = self.server.file_store.get_file(message.file_name)
-            nodes_with_file.remove(self.server.member)
-        else:
-            latest_file: File = File(message.file_name, b"", -1)
 
         resp = self.server.broadcast_to(get_message, nodes_with_file, recv=True)
-        # get the latest version of the file
-
-        for member, message in resp.items():
-            if message.message_type == MessageType.FILE_ACK:
-                if message.version >= latest_file.version and message.data != b"":
-                    latest_file = File(message.file_name, message.data, message.version)
-
-        # reply with the latest version of the file
-
-        # first, check if the file version is -1
-        if latest_file.version == -1:
-            # reply with an error message
+        if resp is None:
             error_message = FileMessage(
                 MessageType.FILE_ERROR,
                 self.server.host,
@@ -350,6 +368,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             return
 
         # reply with the file
+        latest_file = resp[member_with_latest_version]
         file_message = FileMessage(
             MessageType.FILE_ACK,
             self.server.host,
@@ -357,7 +376,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             self.server.timestamp,
             message.file_name,
             latest_file.version,
-            latest_file.file_content,
+            latest_file.data,
         )
         self.request.sendall(add_len_prefix(file_message.serialize()))
 

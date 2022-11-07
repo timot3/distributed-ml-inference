@@ -29,7 +29,7 @@ if __name__ == "__main__":
 
     # get the IP of VM1_URL
     if args.local:
-        HOST, PORT = "127.0.0.1", get_any_open_port()
+        HOST, PORT = "127.0.0.1", 8080
     else:
         HOST, PORT = socket.gethostbyname(VM1_URL), 8080
 

@@ -8,7 +8,7 @@ It also contains useful magic number variables.
 import socket
 import struct
 from enum import Enum, IntEnum
-from typing import List, Any, Optional, Set
+from typing import List, Any, Optional, Set, Tuple
 import logging
 from threading import Lock
 
@@ -419,7 +419,7 @@ class Member:
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
-        self.files: Set[str] = set()
+        self.files: FileStore = FileStore()
 
         if last_heartbeat is None:
             self.last_heartbeat = timestamp
@@ -517,20 +517,33 @@ class MembershipList(list):
 
         return None
 
-    def find_machines_with_file(self, file_name: str) -> List[Member]:
+    def find_machines_with_file(
+        self, file_name: str, file_version: int = -1
+    ) -> List[Member]:
         machines = []
         for m in self:
-            if file_name in m.files:
-                print(f"Found machine with file: {m}")
+            if m.files.has_file_version(file_name, file_version):
                 machines.append(m)
         return machines
 
-    def find_machines_without_file(self, file_name: str) -> List[Member]:
+    def find_machines_without_file(
+        self, file_name: str, file_version: int = -1
+    ) -> List[Member]:
         machines = []
         for m in self:
-            if file_name not in m.files:
+            if not m.files.has_file_version(file_name, file_version):
                 machines.append(m)
+
         return machines
+
+    def find_machine_with_latest_version(
+        self, file_name: str
+    ) -> Tuple[Optional[Member], int]:
+        machines = self.find_machines_with_file(file_name)
+        if len(machines) == 0:
+            return None
+        machines.sort(key=lambda m: m.files.get_file_version(file_name), reverse=True)
+        return machines[0], machines[0].files.get_file_version(file_name)
 
     def __str__(self):
         members = [str(member) for member in self]
@@ -619,10 +632,3 @@ class MembershipListMessage(Message):
     def __str__(self):
         msg_type = MessageType(self.message_type).name
         return f"MembershipListMessage({msg_type}, members={self.members})"
-
-
-class TransferFile:
-    def __init__(self, file_name: str, from_member: Member, to_member: Member):
-        self.file_name = file_name
-        self.from_member = from_member
-        self.to_member = to_member

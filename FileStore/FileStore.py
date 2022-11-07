@@ -1,13 +1,7 @@
 import struct
-from typing import List
+from typing import List, Optional
 
 from FileStore.filetypes import MAX_NUM_VERSIONS
-
-
-class FileVersion:
-    def __init__(self, file_name, version):
-        self.file_name = file_name
-        self.version = version
 
 
 class File:
@@ -93,7 +87,7 @@ class FileStore:
             File(file_name, file_content, version=file_version)
         )
 
-    def get_file(self, file_name):
+    def get_file(self, file_name) -> Optional[File]:
         """
         Get a file from the file store
         """
@@ -112,6 +106,24 @@ class FileStore:
 
         return self.file_map[file_name][-1].version
 
+    def has_file_version(self, file_name, file_version) -> bool:
+        """
+        Check if a file has a particular version
+        :param file_name: The file name to check
+        :param file_version: The version to check. If -1, check if the file exists
+        :return: True if the file has the version, False otherwise
+        """
+        if file_version < 0:
+            return file_name in self.file_map
+
+        if file_name not in self.file_map:
+            return False
+
+        for file in self.file_map[file_name]:
+            if file.version == file_version:
+                return True
+        return False
+
     def get_file_versions(self, file_name, num_versions) -> List[File]:
         """
         Get the last num_versions vesions of the file
@@ -126,14 +138,14 @@ class FileStore:
             num_versions = MAX_NUM_VERSIONS
         return self.file_map[file_name][-num_versions:]
 
-    def delete_file(self, file_name) -> List[File]:
+    def delete_file(self, file_name) -> File:
         """
         Delete a file from the file store
         :param file_name: The file name to delete
         :return: A list of the versions of the file that were deleted
         """
         if file_name not in self.file_map:
-            return []
+            return None
         return self.file_map.pop(file_name)
 
     def get_latest_versions(self) -> List[File]:

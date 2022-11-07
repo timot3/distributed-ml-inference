@@ -343,6 +343,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         Broadcast a message to all `members`
         :param message: the message to broadcast
+        :param members: The members to send to
+        :param recv: Whether or not to receive a response from the members
         :return: a dict of neighbors and whether the message was sent successfully
         """
         member_to_response = {}
@@ -423,16 +425,22 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # and then rereplicate them
         adjusted_membership_list = self.membership_list - [member]
         leaving_member = self.membership_list.get_machine(member)
+        if leaving_member is None:
+            self.logger.warning(f"Leaving member {member} not found in membership list")
         files_on_member = leaving_member.files
 
         # print al the files
         # get the nodes that have the file
-        for file_name in files_on_member:
+        for file_name in files_on_member.get_file_names():
+            # get the latest version the leaving member had
+            file_version = files_on_member.get_file_version(file_name)
             # choose two unique nodes from membership list
             # one that has the file and one that does not
-            nodes_with_file = self.membership_list.find_machines_with_file(file_name)
+            nodes_with_file = self.membership_list.find_machines_with_file(
+                file_name, file_version=file_version
+            )
             machines_without_file = self.membership_list.find_machines_without_file(
-                file_name
+                file_name, file_version=file_version
             )
             if len(machines_without_file) == 0 or len(nodes_with_file) == 0:
                 # we cannot rereplicate the file
@@ -455,13 +463,25 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                     self.member.port,
                     self.member.timestamp,
                     file.file_name,
-                    file.file_content,
                     file.version,
+                    file.file_content,
                 )
                 self._send(put_message, member_without_file)
                 print(f"Sent {file_name} to {member_without_file}")
+
+                # wait for response
+                # if response is successful, then we need to update the membership list
+                # and the file store
+                # in order to not replicate the data of the file,
+                # create a new object with the same file name and version
+                # but with no content
+
+                new_file = File(file.file_name, b"", version=file.version)
+                member_without_file.files.put_file(new_file, b"")
+
                 return
 
+            # else:
             # send a FileReplicationMessage to the node that has the file
             # so that it can send the file to the node that does not have the file
             file_replication_message = FileReplicationMessage(
@@ -480,6 +500,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             resp = self.broadcast_to(
                 file_replication_message, [member_with_file], recv=True
             )
+            new_file = File(file_name, b"", version=file_version)
+            # store the file in the file store
+            member_without_file.files.put_file(new_file, b"")
             print(resp)
 
     def process_leave(self, message, leaving_member: Member) -> None:
