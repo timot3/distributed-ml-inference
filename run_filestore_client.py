@@ -96,7 +96,7 @@ def get_filestore_command(host, port, command=None):
         print(response)
 
         with open(command[2], "wb") as f:
-            f.write(str(response.data).encode("utf-8"))
+            f.write(response.data)
         print("Done writing file")
 
     elif command[0] == "delete":
@@ -115,12 +115,13 @@ if __name__ == "__main__":
 
     puts = []
     gets = []
-    alphabet = "abcdefghijklmnopqrstuvwxyz"
-    for i in range(1):
-        puts.append(["put", "testfiles/numbers.txt", f"{alphabet[i]}.txt"])
+    alphabet = "abcdefghijklmnopqrstuvwxyz".upper()
+    for i in range(10):
+        puts.append(["put", f"testfiles/{alphabet[i]}.txt", f"{alphabet[i]}.txt"])
         gets.append(["get", f"{alphabet[i]}.txt", f"testfiles/res_{alphabet[i]}.txt"])
 
     for get, put in zip(gets, puts):
         get_filestore_command(HOST, PORT, put)
+        time.sleep(5)
         get_filestore_command(HOST, PORT, get)
         time.sleep(3)

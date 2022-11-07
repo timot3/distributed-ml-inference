@@ -291,6 +291,22 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
+    def _recvall(self, sock: socket.socket) -> bytes:
+        # use popular method of recvall
+        data = bytearray()
+        rec = sock.recv(BUFF_SIZE)
+        # remove the length prefix
+        msg_len, msg = trim_len_prefix(rec)
+        data.extend(msg)
+        # read the rest of the data, if any
+        while len(data) < msg_len:
+            msg = sock.recv(BUFF_SIZE)
+            if not msg:
+                break
+            data.extend(msg)
+        self.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
+        return data
+
     def _send(self, msg: Message, member: Member, recv=False) -> Any:
         """
         Send a message to a member
@@ -305,7 +321,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 msg = add_len_prefix(msg.serialize())
                 s.sendall(msg)
                 if recv:
-                    _, data = trim_len_prefix(s.recv(BUFF_SIZE))
+                    data = self._recvall(s)
                     return get_message_from_bytes(data)
                 else:
                     return True

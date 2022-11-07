@@ -19,7 +19,7 @@ lock = Lock()
 # timeout duration of heartbeat
 HEARTBEAT_WATCHDOG_TIMEOUT = 5
 
-BUFF_SIZE = 4096
+BUFF_SIZE = 4096 * 4096
 
 INTRODUCER_HOST = "localhost"
 INTRODUCER_PORT = 8080

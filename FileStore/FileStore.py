@@ -4,6 +4,12 @@ from typing import List
 from FileStore.types import MAX_NUM_VERSIONS
 
 
+class FileVersion:
+    def __init__(self, file_name, version):
+        self.file_name = file_name
+        self.version = version
+
+
 class File:
     """
     Class to represent a file
