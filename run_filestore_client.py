@@ -173,6 +173,40 @@ def test_25_mb(host, port):
     print("DELETE TIME (s): \t\t", end - start)
 
 
+def test_500_mb(host, port):
+    """
+    Test sending a 500 MB file
+    :return: None
+    """
+    with open("testfiles/mb500.test", "rb") as f:
+        file_data = f.read()
+    command_message = make_file_message(
+        file_data, "500mb.txt", MessageType.PUT, host, port
+    )
+    # time the next section
+    start = time.time()
+    response = send_file_message(host, port, command_message)
+    end = time.time()
+
+    print("INSERT TIME (s): \t\t", end - start)
+
+    # read
+    command_message = make_file_version_message("500mb.txt", MessageType.GET, host, port)
+    start = time.time()
+    response = send_file_message(host, port, command_message)
+    end = time.time()
+    print("READ TIME (s): \t\t", end - start)
+
+    # update
+    command_message = make_file_message(
+        file_data, "500mb.txt", MessageType.PUT, host, port
+    )
+    start = time.time()
+    response = send_file_message(host, port, command_message)
+    end = time.time()
+    print("UPDATE TIME (s): \t\t", end - start)
+
+
 def test_40_mb(host, port):
     # upload 40mb file
     with open("testfiles/mb40.test", "rb") as f:
@@ -184,6 +218,22 @@ def test_40_mb(host, port):
 
     # send the message
     response = send_file_message(host, port, command_message)
+    print(response)
+
+
+def test_1_gb(host, port):
+    # upload 40mb file
+    with open("testfiles/raw.en.tgz", "rb") as f:
+        file_data = f.read()
+
+    command_message = make_file_message(file_data, "1gb.txt", MessageType.PUT, host, port)
+
+    # send the message
+    # time the next section
+    start = time.time()
+    response = send_file_message(host, port, command_message)
+    end = time.time()
+    print("INSERT TIME (s): \t\t", end - start)
     print(response)
 
 
@@ -204,8 +254,9 @@ if __name__ == "__main__":
             get_filestore_command(HOST, PORT)
 
     # test_25_mb(HOST, PORT)
-    test_40_mb(HOST, PORT)
-
+    # test_40_mb(HOST, PORT)
+    # test_500_mb(HOST, PORT)
+    test_1_gb(HOST, PORT)
     # puts = []
     # gets = []
     # alphabet = "abcdefghijklmnopqrstuvwxyz".upper()

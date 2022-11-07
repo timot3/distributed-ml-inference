@@ -324,11 +324,12 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 0,
                 b"",
             )
+
             self.request.sendall(add_len_prefix(error_message.serialize()))
             return
 
         # if we have the latest version, send it
-        if self.server.member == member_with_latest_version:
+        if self.server.member.is_same_machine_as(member_with_latest_version):
             # get the file
             latest_file = self.server.file_store.get_file(message.file_name)
             file_message = FileMessage(

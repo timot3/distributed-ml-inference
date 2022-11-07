@@ -10,16 +10,18 @@ TOPDIR="/home/${NETID}"
 [ ! -d "$TOPDIR" ] && mkdir -p "$TOPDIR"
 
 cd "$TOPDIR"
-
-if [ -d "ece428_mp3" ]
-then
-    cd ece428_mp3
-    echo "ece428_mp3 directory found! Performing git pull!"
-    git pull origin master
-else
-    echo "ece428_mp3 directory not found! Performing git clone!"
-    git clone git@gitlab.engr.illinois.edu:tvitkin2/ece428_mp3.git
-fi
+#
+#if [ -d "ece428_mp3" ]
+#then
+#
+#    cd ece428_mp3
+#    echo "ece428_mp3 directory found! Performing git pull!"
+#    git pull origin master
+#else
+#    echo "ece428_mp3 directory not found! Performing git clone!"
+#
+#fi
+git clone git@gitlab.engr.illinois.edu:tvitkin2/ece428_mp3.git
 
 cd "$TOPDIR"
 
