@@ -4,281 +4,37 @@ import socketserver
 import socket
 import threading
 import time
-from typing import List, Tuple, Dict
+import traceback
+from typing import Any, List, Optional, Tuple, Dict
 
-from FileStore.FileStore import FileStore
-from .types import (
+# from nodeelectinfo import NodeElectInfo
+
+import random
+
+from FileStore.FileStore import File, FileStore
+from Node.handler import NodeHandler
+from .nodetypes import (
+    FileReplicationMessage,
+    LSMessage,
     MessageType,
     Message,
     MembershipList,
     Member,
     HEARTBEAT_WATCHDOG_TIMEOUT,
     BUFF_SIZE,
-    bcolors,
     DnsDaemonPortID,
     VM1_URL,
-    FileStoreMessage,
     MembershipListMessage,
+    FileMessage,
 )
 from .utils import (
     add_len_prefix,
     get_self_ip_and_port,
-    in_red,
     in_blue,
-    timed_out,
+    in_red,
     trim_len_prefix,
     get_message_from_bytes,
 )
-
-
-class NodeHandler(socketserver.BaseRequestHandler):
-    def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(addr) != 0:
-                    raise ConnectionError("Could not connect to {}".format(addr))
-                msg = add_len_prefix(msg.serialize())
-                s.sendall(msg)
-            return True
-
-        except Exception as e:
-            self.server.logger.error(f"Error sending message: {e}")
-        finally:
-            return False
-
-    def _recvall(self, sock: socket.socket) -> bytes:
-        # use popular method of recvall
-        data = bytearray()
-        rec = sock.recv(BUFF_SIZE)
-        # remove the length prefix
-        msg_len, msg = trim_len_prefix(rec)
-        data.extend(msg)
-        # read the rest of the data, if any
-        while len(data) < msg_len:
-            msg = sock.recv(BUFF_SIZE)
-            if not msg:
-                break
-            data.extend(msg)
-        self.server.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
-        return data
-
-    def _process_ack(self, message: Message) -> None:
-        ack_machine = Member(message.ip, message.port, message.timestamp)
-        now = int(time.time())
-        if self.server.membership_list.update_heartbeat(ack_machine, now):
-            self.server.logger.debug("Updated heartbeat of {}".format(ack_machine))
-        else:
-            self.server.logger.warning(
-                "Machine {} not found in membership list".format(ack_machine)
-            )
-
-    def _process_join(self, message, new_member):
-        if self.server.membership_list.has_machine(new_member):
-            self.server.logger.debug(
-                "Machine {} already exists in the membership list".format(new_member)
-            )
-            return
-        self.server.broadcast_to_neighbors(message)
-        # add the member after broadcasting
-        # in order to not include the member in neighbors
-        self.server.add_new_member(new_member)
-
-    def _process_message(self, message) -> None:
-        """
-        Process the message and take the appropriate action
-        :param message: The received message
-        :param sender: The machine that sent the message
-        :return: None
-        """
-        self.server.logger.debug("Processing message: {}".format(message))
-        # vary the behavior based on the message type
-        new_member_machine = Member(
-            message.ip,
-            message.port,
-            message.timestamp,
-        )
-        if message.message_type == MessageType.NEW_NODE:
-            if not self.server.is_introducer:
-                self.server.logger.warning(
-                    f"Received a NEW_NODE message from {new_member_machine} but I am not the introducer"
-                )
-                return
-
-            print(self.server.membership_list)
-            self.server.logger.info(f"New member {new_member_machine} joined")
-            new_membership_list = self.server.membership_list + [new_member_machine]
-            new_membership_list = MembershipList(new_membership_list)
-
-            membership_list_msg = MembershipListMessage(
-                MessageType.MEMBERSHIP_LIST,
-                self.server.host,
-                self.server.port,
-                int(time.time()),
-                new_membership_list,
-            )
-            # send the membership list to the node via the tcp socket
-            self.request.sendall(add_len_prefix(membership_list_msg.serialize()))
-            # convert message to a join message
-            message.message_type = MessageType.JOIN
-            self._process_join(message, new_member_machine)
-            print(self.server.membership_list)
-
-        # handle JOIN
-        elif message.message_type == MessageType.JOIN:
-            new_member = Member(message.ip, message.port, message.timestamp)
-            self.server.logger.info(in_blue(f"Received JOIN from {new_member}"))
-
-            self._process_join(message, new_member)
-
-        # handle PING
-        elif message.message_type == MessageType.PING:
-            ack_message = Message(
-                MessageType.PONG,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-            )
-            addr = (message.ip, message.port)
-            self._send(ack_message, addr)
-
-        # handle PONG (ack)
-        elif message.message_type == MessageType.PONG:
-            self._process_ack(message)
-
-        # handle LEAVE
-        elif message.message_type == MessageType.LEAVE:
-            leaving_member = Member(message.ip, message.port, message.timestamp)
-
-            self.server.logger.info(
-                in_blue(f"Received LEAVE message from {leaving_member}")
-            )
-            if leaving_member not in self.server.membership_list:
-                self.server.logger.info(
-                    "Machine {} not found in membership list".format(leaving_member)
-                )
-                return
-            self.server.membership_list.remove(leaving_member)
-            self.server.broadcast_to_neighbors(message)
-
-        # handle DISCONNECTED
-        elif message.message_type == MessageType.DISCONNECTED:
-            # print in red that the node is disconnected
-            fail_str = f"{'-' * 10}\nI HAVE BEEN DISCONNECTED. CLEARING MEMBERSHIP LIST AND REJOINING!!!!!"
-            self.server.logger.critical(in_red(fail_str))
-            self.server.in_ring = False
-            time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
-            self.server.rejoin()
-
-        elif message.message_type == MessageType.ELECT_PING:
-            # No need for a different type of message to initiate election compared to
-            # sending election messages to lower id nodes (action is exactly the same in
-            # Bully algorithm for elections)
-            # Find everyone in membership list
-            # Send to all others in membership list with lower id
-            # Wait for n seconds e.g. 5 seconds
-            # No replies - declare leader
-            pass
-
-        elif message.message_type == MessageType.CLAIM_LEADER_ACK:
-            pass
-
-        elif message.message_type == MessageType.CLAIM_LEADER_PING:
-            # Check if another node made a claim of being a leader in previous 5s
-            # If so, initiate another election.
-            # Otherwise, acknowledge sender as leader
-            pass
-
-        # handle PUT for file store
-        elif message.message_type == MessageType.PUT:
-            self.server.logger.info(f"Received PUT request for {message.file_name}")
-            self.server.file_store.put_file(message.file_name, message.data)
-            # reply with FILE_ACK
-
-            # if this node is the introducer, broadcast the received message to all other nodes
-            # but, since we want the nodes to ack to the introducer, not the client, we need to
-            # change the ip and port to the introducer's
-
-            # TODO: @Zhuxuan:
-            # This is where we broadcast to either the leader, or the other nodes.
-            # The leader is determined, currently, only in the join_network function.
-            # We need to change this to be determined by the leader election algorithm.
-
-            if self.server.is_introducer:
-
-                message.ip = self.server.host
-                message.port = self.server.port
-                message.timestamp = self.server.timestamp
-                self.server.logger.info(
-                    "I am the leader. Broadcasting PUT request to neighbors!"
-                )
-                self.server.broadcast_to_neighbors(message)
-
-                # reply to the sender (the client)
-                client_ack_message = FileStoreMessage(
-                    MessageType.FILE_ACK,
-                    self.server.host,
-                    self.server.port,
-                    self.server.timestamp,
-                    message.file_name,
-                    message.version,
-                    b"",  # no data -- this is an ack
-                )
-                self.server.logger.info(f"Replying with {client_ack_message}")
-                self.request.sendall(add_len_prefix(client_ack_message.serialize()))
-
-            else:
-                # ack to the introducer
-                self.server.logger.info("I am not the leader. Acking to leader!")
-                print(f"{message}")
-                self_ack_message = FileStoreMessage(
-                    MessageType.FILE_ACK,
-                    self.server.host,
-                    self.server.port,
-                    self.server.timestamp,
-                    message.file_name,
-                    message.version,
-                    b"",  # no data -- this is an ack
-                )
-                addr = (self.server.leader_host, self.server.leader_port)
-                self._send(self_ack_message, addr)
-
-        # handle GET for file store
-        elif message.message_type == MessageType.GET:
-            raise NotImplementedError
-
-        # handle DELETE for file store
-        elif message.message_type == MessageType.DELETE:
-            raise NotImplementedError
-
-        elif message.message_type == MessageType.FILE_ACK:
-            # construct member from message
-            ack_member = Member(message.ip, message.port, message.timestamp)
-            self.server.logger.info(f"Received FILE_ACK from {ack_member}")
-
-        else:
-            raise ValueError("Unknown message type! Received Message: ".format(message))
-
-    def handle(self):
-        self.server.logger.debug("Handling request from {}".format(self.client_address))
-        data = self._recvall(self.request)
-        data = data.strip()
-
-        if len(data) == 0:
-            return
-
-        if self.server.slow_mode:
-            time.sleep(1)
-
-        # get the machine that sent the message
-        ip_of_sender = self.client_address[0]
-        port_of_sender = self.client_address[1]
-        timestamp_of_sender = int(time.time())
-
-        machine_of_sender = Member(ip_of_sender, port_of_sender, timestamp_of_sender)
-
-        # deserialize the message
-        received_message = get_message_from_bytes(data)
-        self._process_message(received_message)
 
 
 # the node class is a subclass of UDPServer
@@ -289,8 +45,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self,
         host,
         port,
-        introducer_host,
-        introducer_port,
         is_introducer=False,
         slow_mode=False,
     ):
@@ -301,9 +55,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.is_introducer = is_introducer
         self.slow_mode = slow_mode
-
-        # self.introducer_host = introducer_host
-        # self.introducer_port = introducer_port
 
         # initialized when the node joins the ring
         self.leader_host = None
@@ -329,6 +80,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # set the handler class
         self.RequestHandlerClass = NodeHandler
         self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        # self.election_info = NodeElectInfo()
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -497,6 +249,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                         f"Failed to notify {member} of their failure, meaning they are dead. Notifying neighbors..."
                     )
                     # remove the failed member from the membership list
+                    if self.is_introducer:
+                        # replicate files
+                        self._rereplicate_files(member)
                     self.membership_list.remove(member)
                     leave_message = Message(
                         MessageType.LEAVE, member.ip, member.port, member.timestamp
@@ -536,7 +291,23 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
-    def _send(self, msg: Message, member: Member) -> bool:
+    def _recvall(self, sock: socket.socket) -> bytes:
+        # use popular method of recvall
+        data = bytearray()
+        rec = sock.recv(BUFF_SIZE)
+        # remove the length prefix
+        msg_len, msg = trim_len_prefix(rec)
+        data.extend(msg)
+        # read the rest of the data, if any
+        while len(data) < msg_len:
+            msg = sock.recv(BUFF_SIZE)
+            if not msg:
+                break
+            data.extend(msg)
+        self.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
+        return data
+
+    def _send(self, msg: Message, member: Member, recv=False) -> Any:
         """
         Send a message to a member
         :param msg: The message to send
@@ -549,13 +320,46 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 s.connect((member.ip, member.port))
                 msg = add_len_prefix(msg.serialize())
                 s.sendall(msg)
+                if recv:
+                    data = self._recvall(s)
+                    return get_message_from_bytes(data)
+                else:
+                    return True
         except Exception as e:
             self.logger.error(
                 in_red("Failed to send message to member {}: {}".format(member, e))
             )
-            return False
+            # print the stack trace
+            return None
 
-        return True
+    def broadcast_to(
+        self, message: Message, members: List[Member], recv=False
+    ) -> Dict[Member, bool]:
+        """
+        Broadcast a message to all `members`
+        :param message: the message to broadcast
+        :return: a dict of neighbors and whether the message was sent successfully
+        """
+        member_to_response = {}
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Start the broadcast operations and get whether send was successful for each neighbor
+            future_to_member = {
+                executor.submit(self._send, message, neighbor, recv=recv): neighbor
+                for neighbor in members
+            }
+            for future in concurrent.futures.as_completed(future_to_member):
+                member = future_to_member[future]
+                try:
+                    data = future.result()
+                    member_to_response[member] = data
+                    self.logger.debug(f"Received resp {data} from {member}")
+                except Exception as exc:
+                    self.logger.critical(
+                        in_red(f"{member} generated an exception: {exc}")
+                    )
+
+        return member_to_response
 
     def broadcast_to_neighbors(self, message) -> Dict[Member, bool]:
         """
@@ -563,32 +367,37 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :param message: the message to broadcast
         :return: a dict of neighbors and whether the message was sent successfully
         """
-        neighbors_to_successes = {}
-        neighbors = MembershipList(self.get_neighbors())
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
-            # Start the broadcast operations and get whether send was successful for each neighbor
-            future_to_member = {
-                executor.submit(self._send, message, neighbor): neighbor
-                for neighbor in neighbors
-            }
-            for future in concurrent.futures.as_completed(future_to_member):
-                member = future_to_member[future]
-                try:
-                    data = future.result()
-                    neighbors_to_successes[member] = data
-                    self.logger.debug(f"Sent message to {member}")
-                except Exception as exc:
-                    self.logger.critical(
-                        in_red(f"{member} generated an exception: {exc}")
-                    )
-
-        return neighbors_to_successes
+        neighbors = self.get_neighbors()
+        return self.broadcast_to(message, neighbors)
 
     def add_new_member(self, member) -> None:
         # add the new member to the membership list
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
+
+    def send_ls(self, display_res=True) -> Dict[Member, Any]:
+        """
+        Send a LS message to all neighbors
+        :return: None
+        """
+        ls_message = LSMessage(
+            MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
+        )
+        res = self.broadcast_to(ls_message, self.membership_list, recv=True)
+        if display_res:
+            for member, message in res.items():
+                files_str = ", ".join(str(file) for file in message.files)
+                print(f"{member}: {files_str}")
+
+        return res
+
+    def get_file_store(self) -> FileStore:
+        """
+        Get the local files
+        :return: a list of files
+        """
+        return self.file_store
 
     def get_membership_list(self) -> MembershipList:
         """
@@ -596,6 +405,98 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :return: membership_list as a MembershipList object
         """
         return self.membership_list
+
+    def _rereplicate_files(self, member: Member) -> None:
+        """If the node is the introducer, then we want to
+        Rereplicate the files that the node had onto the other nodes
+
+        Args:
+            member (Member): The member that left
+
+        """
+        # we need tof ind the files in the membership lsit
+        # and then rereplicate them
+        adjusted_membership_list = self.membership_list - [member]
+        leaving_member = self.membership_list.get_machine(member)
+        files_on_member = leaving_member.files
+
+        # print al the files
+        # get the nodes that have the file
+        for file_name in files_on_member:
+            # choose two unique nodes from membership list
+            # one that has the file and one that does not
+            nodes_with_file = self.membership_list.find_machines_with_file(file_name)
+            machines_without_file = self.membership_list.find_machines_without_file(
+                file_name
+            )
+            if len(machines_without_file) == 0 or len(nodes_with_file) == 0:
+                # we cannot rereplicate the file
+                continue
+
+            member_with_file = random.choice(nodes_with_file)
+            member_without_file = random.choice(machines_without_file)
+
+            print(
+                f"Chose {member_with_file} to send {file_name} to {member_without_file}"
+            )
+            # if the member with the file is the introducer, then we need to send the file
+            # to the member without the file
+            if member_with_file.is_same_machine_as(self.member):
+                # construct PUT message with file
+                file = self.file_store.get_file(file_name)
+                put_message = FileMessage(
+                    MessageType.PUT,
+                    self.member.ip,
+                    self.member.port,
+                    self.member.timestamp,
+                    file.file_name,
+                    file.file_content,
+                    file.version,
+                )
+                self._send(put_message, member_without_file)
+                print(f"Sent {file_name} to {member_without_file}")
+                return
+
+            # send a FileReplicationMessage to the node that has the file
+            # so that it can send the file to the node that does not have the file
+            file_replication_message = FileReplicationMessage(
+                MessageType.FILE_REPLICATION_REQUEST,
+                member_without_file.ip,
+                member_without_file.port,
+                member_without_file.timestamp,
+                file_name,
+                member_with_file.ip,
+                member_with_file.port,
+                member_with_file.timestamp,
+            )
+
+            print("Broadcasting file replication message")
+
+            resp = self.broadcast_to(
+                file_replication_message, [member_with_file], recv=True
+            )
+            print(resp)
+
+    def process_leave(self, message, leaving_member: Member) -> None:
+        """
+        Process a leave message
+        :param member: the member that left
+        :return: None
+        """
+
+        self.logger.info(in_blue(f"Received LEAVE message from {leaving_member}"))
+        if leaving_member not in self.membership_list:
+            self.logger.info(
+                "Machine {} not found in membership list".format(leaving_member)
+            )
+            return
+        if self.is_introducer:
+            print(in_red("REREPLICATING FILES"))
+            self._rereplicate_files(leaving_member)
+
+        if leaving_member in self.membership_list:
+            self.membership_list.remove(leaving_member)
+        self.broadcast_to_neighbors(message)
 
     def get_self_id(self) -> int:
         """
@@ -608,6 +509,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         except ValueError:
             self.logger.error("I am not in membership list!")
         return idx
+
+    def get_self_id_tuple(self) -> Tuple[str, str, int]:
+        return (self.host, self.port, self.timestamp)
 
     def get_alleged_introducer_ip(self):
         """

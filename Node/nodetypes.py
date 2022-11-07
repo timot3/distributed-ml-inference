@@ -1,21 +1,32 @@
+"""
+This file contains most of the types used in the project, including the Message class and its subclasses.
+These classes are used to serialize and deserialize messages.
+
+It also contains useful magic number variables.
+"""
+
 import socket
 import struct
-from enum import IntEnum
-from typing import List, Any, Optional
+from enum import Enum, IntEnum
+from typing import List, Any, Optional, Set
 import logging
 from threading import Lock
+
+from FileStore.FileStore import File, FileStore
 
 lock = Lock()
 
 # timeout duration of heartbeat
 HEARTBEAT_WATCHDOG_TIMEOUT = 5
 
-BUFF_SIZE = 4096
+BUFF_SIZE = 4096 * 4096
 
 INTRODUCER_HOST = "localhost"
 INTRODUCER_PORT = 8080
 
 ELECT_LEADER_TIMEOUT = 3
+
+REPLICATION_LEVEL = 4
 
 
 class MessageType(IntEnum):
@@ -35,12 +46,17 @@ class MessageType(IntEnum):
     # FileStore messages
     PUT = 9
     GET = 10
-    DELETE = 11
-    FILE_ACK = 12
+    GET_VERSIONS = 11
+    DELETE = 12
+    FILE_ACK = 13
+    LS = 14
+    FILE_ERROR = 15
+    FILE_REPLICATION_REQUEST = 16
+    FILE_REPLICATION_ACK = 17
 
     # Membership messages
-    NEW_NODE = 13
-    MEMBERSHIP_LIST = 14
+    NEW_NODE = 18
+    MEMBERSHIP_LIST = 19
 
 
 # PORT IDs
@@ -52,6 +68,7 @@ class DnsDaemonPortID(IntEnum):
 INTRODUCER_PORT = 8789
 
 VM1_URL = "fa22-cs425-2501.cs.illinois.edu"
+
 
 # https://stackoverflow.com/questions/287871/how-do-i-print-colored-text-to-the-terminal
 class bcolors:
@@ -131,7 +148,7 @@ class Message:
         return hash((self.message_type, self.ip, self.port, self.timestamp))
 
 
-class FileStoreMessage(Message):
+class FileMessage(Message):
     def __init__(
         self,
         message_type: MessageType,
@@ -160,7 +177,6 @@ class FileStoreMessage(Message):
         version = struct.pack(">I", self.version)
 
         # finally, append all the bytes together
-
         return base_message + file_name + version + self.data
 
     @classmethod
@@ -194,7 +210,208 @@ class FileStoreMessage(Message):
 
     def __str__(self):
         msg_type = MessageType(self.message_type).name
-        return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={self.data})"
+        data_first_10 = self.data[:10]
+        if len(self.data) > 10:
+            data_first_10 += b"..."
+        return f"FileStoreMessage({msg_type}, file_name={self.file_name}, version={self.version}, data={data_first_10})"
+
+
+class FileReplicationMessage(Message):
+    """
+    This message is used to replicate a file to another node
+    The node that receives this message will send the file to the
+    node at the `to_ip` and `to_port` fields
+
+    Then, the node will reply to the node that sent this message
+    with a FileReplicationMessage with the `message_type` set to
+    `MessageType.FILE_REPLICATION_ACK` when the file has been sent
+    """
+
+    def __init__(
+        self,
+        message_type: MessageType,
+        to_ip: str,  # the ip of the machine that will receive the file
+        to_port: int,  # the port of the machine that will receive the file
+        to_timestamp: int,  # the timestamp of the machine that will receive the file
+        file_name: str,
+        from_ip: str,  # The ip address of the node that has the file
+        from_port: int,  # The port of the node that has the file
+        from_timestamp: int,  # The timestamp of the node that has the file
+    ):
+        super().__init__(message_type, to_ip, to_port, to_timestamp)
+        self.file_name = file_name
+        self.from_ip = from_ip
+        self.from_port = from_port
+        self.from_timestamp = from_timestamp
+
+    def serialize(self):
+        base_message = super().serialize()
+        # pack the filename into a 32 byte string using struct.pack
+        file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
+
+        # pack the from_ip into a 4 byte string using struct.pack
+        from_ip = socket.inet_aton(self.from_ip)
+
+        # pack the from_port into a 2 byte int using struct.pack
+        from_port = struct.pack(">H", self.from_port)
+
+        # pack the from_timestamp into a 4 byte int using struct.pack
+        from_timestamp = struct.pack(">I", self.from_timestamp)
+
+        # finally, append all the bytes together
+        return base_message + file_name + from_ip + from_port + from_timestamp
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        base_size = communication_struct.size
+
+        min_size = base_size + (32 + 4 + 2 + 4)
+        if len(data) < min_size:
+            raise ValueError("Invalid message")
+
+        # get the message type
+        # the first 14 bytes are the same as the communication message
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # get the filename
+        file_name = struct.unpack(">32s", data[base_size : base_size + 32])[0]
+        file_name = file_name.decode("utf-8").strip("\x00")
+
+        # get the from_ip
+        from_ip = socket.inet_ntoa(data[base_size + 32 : base_size + 36])
+
+        # get the from_port
+        from_port = struct.unpack(">H", data[base_size + 36 : base_size + 38])[0]
+
+        # get the from_timestamp
+        from_timestamp = struct.unpack(">I", data[base_size + 38 : base_size + 42])[0]
+
+        return cls(
+            message_type,
+            ip,
+            port,
+            timestamp,
+            file_name,
+            from_ip,
+            from_port,
+            from_timestamp,
+        )
+
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"FileReplicationMessage({msg_type}, file_name={self.file_name}, from_ip={self.from_ip}, from_port={self.from_port}, from_timestamp={self.from_timestamp})"
+
+
+class FileVersionMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        file_name: str,
+        versions: List[int],
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.file_name = file_name
+        self.versions = versions
+
+    def serialize(self):
+        base_message = super().serialize()
+        # pack the filename into a 32 byte string using struct.pack
+        file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
+
+        # pack the number of versions into a 4 byte int using struct.pack
+        num_versions = struct.pack(">I", len(self.versions))
+
+        # pack the versions into a byte string using struct.pack
+        versions = struct.pack(f">{len(self.versions)}I", *self.versions)
+
+        # finally, append all the bytes together
+        return base_message + file_name + num_versions + versions
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        base_size = communication_struct.size
+
+        min_size = base_size + (32 + 4)
+        if len(data) < min_size:
+            raise ValueError("Invalid message")
+
+        # get the message type
+        # the first 14 bytes are the same as the communication message
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # get the filename
+        file_name = struct.unpack(">32s", data[base_size : base_size + 32])[0]
+        file_name = file_name.decode("utf-8").strip("\x00")
+
+        # get the number of versions
+        num_versions = struct.unpack(">I", data[base_size + 32 : base_size + 36])[0]
+
+        # get the versions
+        versions = struct.unpack(f">{num_versions}I", data[base_size + 36 :])[0]
+
+        return cls(message_type, ip, port, timestamp, file_name, versions)
+
+
+class LSMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        files: List[File],
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.files = files
+
+    def serialize(self):
+        base_message = super().serialize()
+        # serialize the files
+        ls_files = b",".join(file.ls_serialize() for file in self.files)
+        return base_message + ls_files
+
+    @classmethod
+    def deserialize(cls, data: bytes):
+        base_message = Message.deserialize(data[: communication_struct.size])
+        message_type = base_message.message_type
+        ip = base_message.ip
+        port = base_message.port
+        timestamp = base_message.timestamp
+
+        # get the file list
+        if len(data) > communication_struct.size:
+            files = data[communication_struct.size :].split(b",")
+            files = [File.ls_deserialize(file) for file in files]
+        else:
+            files = []
+
+        return cls(message_type, ip, port, timestamp, files)
+
+    def __str__(self):
+        msg_type = MessageType(self.message_type).name
+        return f"LSMessage({msg_type}, files={self.files})"
+
+
+class ElectionMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+    ):
+        super.__init__(self, message_type, ip, port, timestamp)
 
 
 class Member:
@@ -202,6 +419,7 @@ class Member:
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
+        self.files: Set[str] = set()
 
         if last_heartbeat is None:
             self.last_heartbeat = timestamp
@@ -220,6 +438,16 @@ class Member:
             and self.port == other.port
             and self.timestamp == other.timestamp
         )
+
+    def __lt__(self, other):
+        if self == other:
+            logging.warn(
+                f"Exactly the same elements detected when doing a less than comparison"
+            )
+        if self.timestamp == other.timestamp:
+            # tiebreak
+            return self.ip < other.ip
+        return self.timestamp < other.timestamp
 
     def __hash__(self):
         return hash((self.ip, self.port, self.timestamp))
@@ -289,9 +517,28 @@ class MembershipList(list):
 
         return None
 
+    def find_machines_with_file(self, file_name: str) -> List[Member]:
+        machines = []
+        for m in self:
+            if file_name in m.files:
+                print(f"Found machine with file: {m}")
+                machines.append(m)
+        return machines
+
+    def find_machines_without_file(self, file_name: str) -> List[Member]:
+        machines = []
+        for m in self:
+            if file_name not in m.files:
+                machines.append(m)
+        return machines
+
     def __str__(self):
         members = [str(member) for member in self]
         return f"MembershipList({', '.join(members)})"
+
+    def __sub__(self, other):
+        # return a new membership list with the members that are not in the other
+        return MembershipList([member for member in self if member not in other])
 
     def serialize(self):
         # ip address and port and timestamp are separated by a colon
@@ -315,6 +562,14 @@ class MembershipList(list):
         # verify that the ip and port are valid
 
         return cls(membership_list)
+
+    def get_files_on_all_str(self) -> str:
+        res = ""
+        for m in self:
+            files = ", ".join(m.files)
+            res += f"{m}: {files}\n"
+
+        return res
 
 
 class MembershipListMessage(Message):
@@ -364,3 +619,10 @@ class MembershipListMessage(Message):
     def __str__(self):
         msg_type = MessageType(self.message_type).name
         return f"MembershipListMessage({msg_type}, members={self.members})"
+
+
+class TransferFile:
+    def __init__(self, file_name: str, from_member: Member, to_member: Member):
+        self.file_name = file_name
+        self.from_member = from_member
+        self.to_member = to_member
