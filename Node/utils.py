@@ -4,7 +4,7 @@ import textwrap
 import time
 from typing import Tuple
 
-from Node.types import (
+from Node.nodetypes import (
     LSMessage,
     bcolors,
     MessageType,

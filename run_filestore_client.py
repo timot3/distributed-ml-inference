@@ -2,7 +2,7 @@ import socket
 import time
 from typing import List
 
-from Node.types import FileMessage, Message, MessageType
+from Node.nodetypes import FileMessage, Message, MessageType
 from Node.utils import get_message_from_bytes, trim_len_prefix, add_len_prefix
 
 BUFF_SIZE = 4096

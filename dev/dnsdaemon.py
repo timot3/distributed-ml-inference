@@ -5,7 +5,7 @@ import threading
 import logging
 from time import sleep
 
-from Node.types import DnsDaemonPortID, VM1_URL
+from Node.nodetypes import DnsDaemonPortID, VM1_URL
 from Node.utils import ip_url_dict
 
 """

@@ -13,7 +13,7 @@ import random
 
 from FileStore.FileStore import File, FileStore
 from Node.handler import NodeHandler
-from .types import (
+from .nodetypes import (
     FileReplicationMessage,
     LSMessage,
     MessageType,

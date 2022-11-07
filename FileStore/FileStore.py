@@ -1,7 +1,7 @@
 import struct
 from typing import List
 
-from FileStore.types import MAX_NUM_VERSIONS
+from FileStore.filetypes import MAX_NUM_VERSIONS
 
 
 class FileVersion:

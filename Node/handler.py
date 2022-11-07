@@ -27,7 +27,7 @@ import random
 from threading import Lock
 
 from FileStore.FileStore import File
-from .types import (
+from .nodetypes import (
     REPLICATION_LEVEL,
     FileReplicationMessage,
     LSMessage,
