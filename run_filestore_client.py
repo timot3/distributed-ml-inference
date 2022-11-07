@@ -173,6 +173,20 @@ def test_25_mb(host, port):
     print("DELETE TIME (s): \t\t", end - start)
 
 
+def test_40_mb(host, port):
+    # upload 40mb file
+    with open("testfiles/mb40.test", "rb") as f:
+        file_data = f.read()
+
+    command_message = make_file_message(
+        file_data, "40mb.txt", MessageType.PUT, host, port
+    )
+
+    # send the message
+    response = send_file_message(host, port, command_message)
+    print(response)
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="Run the client locally")
@@ -189,7 +203,8 @@ if __name__ == "__main__":
         while True:
             get_filestore_command(HOST, PORT)
 
-    test_25_mb(HOST, PORT)
+    # test_25_mb(HOST, PORT)
+    test_40_mb(HOST, PORT)
 
     # puts = []
     # gets = []

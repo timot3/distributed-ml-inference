@@ -33,6 +33,7 @@ from .utils import (
     in_red,
     trim_len_prefix,
     get_message_from_bytes,
+    in_green,
 )
 
 
@@ -423,6 +424,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         # we need tof ind the files in the membership lsit
         # and then rereplicate them
+        start_time = time.time()
         adjusted_membership_list = self.membership_list - [member]
         leaving_member = self.membership_list.get_machine(member)
         if leaving_member is None:
@@ -478,7 +480,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
                 new_file = File(file.file_name, b"", version=file.version)
                 member_without_file.files.put_file(new_file, b"")
-
+                end_time = time.time()
+                print(in_green(f"Rereplicated {file_name} in {end_time - start_time}s"))
                 return
 
             # else:
@@ -504,6 +507,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             # store the file in the file store
             member_without_file.files.put_file(new_file, b"")
             print(resp)
+
+        end_time = time.time()
+        print(in_green(f"Rereplicated {file_name} in {end_time - start_time}s"))
 
     def process_leave(self, message, leaving_member: Member) -> None:
         """
