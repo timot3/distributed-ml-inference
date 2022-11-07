@@ -29,7 +29,6 @@ from .nodetypes import (
 )
 from .utils import (
     add_len_prefix,
-    get_self_ip_and_port,
     in_blue,
     in_red,
     trim_len_prefix,
@@ -50,6 +49,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
     ):
         # call the super class constructor
         super().__init__((host, port), None, bind_and_activate=False)
+
         self.host = host
         self.port = port
 
@@ -57,8 +57,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.slow_mode = slow_mode
 
         # initialized when the node joins the ring
-        self.leader_host = None
-        self.leader_port = None
+        self.introducer_host = None
+        self.introducer_port = None
 
         # initialized when the node joins the ring
         self.timestamp: int = 0
@@ -106,7 +106,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as introducer_sock:
 
             introducer_sock.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
-            host, port = get_self_ip_and_port(self.socket)
             self.timestamp = int(time.time())
 
             self.member = Member(host, port, self.timestamp)
@@ -124,13 +123,19 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
                 return True
 
+            # store the introducer ip and port
+            self.introducer_host = introducer_host
+            self.introducer_port = introducer_port
+
             try:
                 if introducer_sock.connect_ex((introducer_host, introducer_port)) != 0:
                     self.logger.error("Could not connect to introducer")
                     return False
 
                 # first, construct self's member
-                join_message = Message(MessageType.NEW_NODE, host, port, self.timestamp)
+                join_message = Message(
+                    MessageType.NEW_NODE, self.host, self.port, self.timestamp
+                )
 
                 # send the new node message to the introducer
                 introducer_sock.sendall(add_len_prefix(join_message.serialize()))

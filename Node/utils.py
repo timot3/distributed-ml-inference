@@ -39,17 +39,6 @@ def trim_len_prefix(message: bytes) -> Tuple[int, bytes]:
     return msg_len, msg
 
 
-def get_self_ip_and_port(sock):
-    """
-    Gets the ip and port of the socket
-    :param sock: the socket
-    :return: the ip and port of the socket
-    """
-    ip = "127.0.0.1"  # TODO: get the ip of THIS machine
-    port = sock.getsockname()[1]
-    return ip, port
-
-
 def get_any_open_port() -> int:
     """
     Gets a random open port

@@ -26,6 +26,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.local:
         HOST, PORT = "127.0.0.1", get_any_open_port()
+        INTRODUCER_HOST, INTRODUCER_PORT = "127.0.0.1", 8080
 
     else:
         # get the Node ID from the environment variable
@@ -35,13 +36,17 @@ if __name__ == "__main__":
         self_ip = socket.gethostbyname(socket.gethostname())
         HOST, PORT = self_ip, 8080
 
+        INTRODUCER_HOST, INTRODUCER_PORT = socket.gethostbyname(VM1_URL), 8080
+
     # create a udp server that resuses the address
 
     with NodeTCPServer(HOST, PORT, is_introducer=False) as node:
         node.allow_reuse_address = True
         node.server_bind()
         node.server_activate()
-        node.join_network()
+        node.join_network(
+            introducer_host=INTRODUCER_HOST, introducer_port=INTRODUCER_PORT
+        )
         thread = threading.Thread(target=node.serve_forever, daemon=True)
         thread.start()
         print(in_green(f"Node running on {HOST}:{PORT}"))
