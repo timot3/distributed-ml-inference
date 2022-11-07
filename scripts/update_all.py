@@ -52,9 +52,9 @@ def main():
         return 1
 
     curdir = os.getcwd()
-    if not curdir.endswith("ece428_mp1/scripts"):
+    if not curdir.endswith("ece428_mp3/scripts"):
         print(
-            f"curdir is: {curdir} . It is not in a directory with path ending with 'ece428_mp1/scripts'!"
+            f"curdir is: {curdir} . It is not in a directory with path ending with 'ece428_mp3/scripts'!"
         )
         return 1
 
@@ -66,6 +66,9 @@ def main():
     with ThreadPoolExecutor(max_workers=NUM_VM) as executor:
         for i in range(1, NUM_VM + 1):
             vmurl = f"{args.netID}@fa22-cs425-25{i:02}.cs.illinois.edu"
+            command = f"ssh {pubkey_arg} {vmurl} 'bash -s' < {curdir}/vm_ssh_update.sh {args.netID} {i}"
+            executor.submit(run_wrapper, command)
+            print("Submitted command: " + command)
 
 
 if __name__ == "__main__":
