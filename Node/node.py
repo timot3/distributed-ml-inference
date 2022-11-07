@@ -108,7 +108,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             introducer_sock.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
             self.timestamp = int(time.time())
 
-            self.member = Member(host, port, self.timestamp)
+            self.member = Member(self.host, self.port, self.timestamp)
 
             if self.is_introducer:
                 self.in_ring = True
