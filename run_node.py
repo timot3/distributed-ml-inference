@@ -1,6 +1,10 @@
+import argparse
+import os
 import threading
+import socket
 
 from Node.node import NodeTCPServer
+from Node.nodetypes import VM1_URL
 from Node.utils import get_any_open_port, in_green, run_node_command_menu
 import logging
 
@@ -16,8 +20,21 @@ if __name__ == "__main__":
         handler.setLevel(logging.INFO)
     logging.basicConfig(level=logging.INFO)
 
-    HOST, PORT = "127.0.0.1", get_any_open_port()
-    INTRODUCER_HOST, INTRODUCER_PORT = "127.0.0.1", 8080
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--local", action="store_true", help="Run the client locally")
+
+    args = parser.parse_args()
+    if args.local:
+        HOST, PORT = "127.0.0.1", get_any_open_port()
+
+    else:
+        # get the Node ID from the environment variable
+        node_id = os.environ["NODE_ID"]
+
+        # get self ip address
+        self_ip = socket.gethostbyname(socket.gethostname())
+        HOST, PORT = self_ip, 8080
+
     # create a udp server that resuses the address
 
     with NodeTCPServer(HOST, PORT, is_introducer=False) as node:

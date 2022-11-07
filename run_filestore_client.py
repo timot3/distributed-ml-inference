@@ -1,8 +1,10 @@
+import argparse
+import os
 import socket
 import time
 from typing import List
 
-from Node.nodetypes import FileMessage, Message, MessageType
+from Node.nodetypes import FileMessage, Message, MessageType, VM1_URL
 from Node.utils import get_message_from_bytes, trim_len_prefix, add_len_prefix
 
 BUFF_SIZE = 4096
@@ -109,9 +111,15 @@ def get_filestore_command(host, port, command=None):
 
 
 if __name__ == "__main__":
-    HOST, PORT = "127.0.0.1", 8080
-    # while True:
-    #     get_filestore_command(HOST, PORT)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--local", action="store_true", help="Run the client locally")
+
+    args = parser.parse_args()
+    if args.local:
+        HOST, PORT = "127.0.0.1", 8080
+    else:
+        self_ip = socket.gethostbyname(socket.gethostname())
+        HOST, PORT = self_ip, 8080
 
     puts = []
     gets = []
