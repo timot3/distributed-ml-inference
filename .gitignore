@@ -11,3 +11,6 @@
 # testing files
 debug.log
 playground.ipynb
+testfiles/*.txt
+testfiles/*.test
+testfiles/*.en.tgz

@@ -21,7 +21,7 @@ Raises:
 import socketserver
 import socket
 import time
-from typing import Any, List, Optional, Tuple, Dict
+from typing import Any, List, Optional, Tuple, Dict, TYPE_CHECKING
 
 import random
 from threading import Lock
@@ -51,8 +51,12 @@ from .utils import (
     get_message_from_bytes,
 )
 
+if TYPE_CHECKING:
+    from .node import NodeTCPServer
+
 
 class NodeHandler(socketserver.BaseRequestHandler):
+    server: "NodeTCPServer"
     election_timestamp = time.time()
     election_lock = Lock()
     claim_leader_timestamp = 0
@@ -117,8 +121,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
 
         if not self.server.is_introducer:
-            # store the file locally
-            self.server.file_store.put_file(message.file_name, message.data)
+            # do not store the file locally
             return
 
         # choose REPLICATION_LEVEL nodese
