@@ -1,0 +1,13 @@
+# pycache
+**/__pycache__/
+**/*.py[cod]
+
+# venv
+**/venv
+
+# pycharm specific files
+.idea/
+
+# testing files
+debug.log
+playground.ipynb
