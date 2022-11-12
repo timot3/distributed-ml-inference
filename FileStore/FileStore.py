@@ -161,3 +161,7 @@ class FileStore:
         :return: A list of all the file names
         """
         return list(self.file_map.keys())
+
+    def __str__(self):
+        text = ", ".join([file_name for file_name in self.file_map])
+        return text

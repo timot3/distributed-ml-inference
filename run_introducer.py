@@ -20,7 +20,9 @@ if __name__ == "__main__":
         handlers=[logging.FileHandler("debug.log"), logging.StreamHandler()],
     )
 
-    formatter = logging.Formatter("%(name)s:[%(levelname)-8s] %(message)s")
+    formatter = logging.Formatter(
+        "[%(filename)s:%(lineno)d]:[%(levelname)-8s] %(message)s"
+    )
 
     for handler in logging.root.handlers:
         handler.setFormatter(formatter)

@@ -245,6 +245,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="Run the client locally")
     parser.add_argument("--menu", action="store_true", help="Run the client in menu mode")
+    parser.add_argument(
+        "--num-files", type=int, default=3, help="Number of files to test"
+    )
 
     args = parser.parse_args()
     if args.local:
@@ -260,16 +263,16 @@ if __name__ == "__main__":
     # test_25_mb(HOST, PORT)
     # test_40_mb(HOST, PORT)
     # test_500_mb(HOST, PORT)
-    test_1_gb(HOST, PORT)
-    # puts = []
-    # gets = []
-    # alphabet = "abcdefghijklmnopqrstuvwxyz".upper()
-    # for i in range(10):
-    #     puts.append(["put", f"testfiles/{alphabet[i]}.txt", f"{alphabet[i]}.txt"])
-    #     gets.append(["get", f"{alphabet[i]}.txt", f"testfiles/res_{alphabet[i]}.txt"])
-    #
-    # for get, put in zip(gets, puts):
-    #     get_filestore_command(HOST, PORT, put)
-    #     time.sleep(5)
-    #     get_filestore_command(HOST, PORT, get)
-    #     time.sleep(3)
+    # test_1_gb(HOST, PORT)
+    puts = []
+    gets = []
+    alphabet = "abcdefghijklmnopqrstuvwxyz".upper()
+    for i in range(args.num_files):
+        puts.append(["put", f"testfiles/{alphabet[i]}.txt", f"{alphabet[i]}.txt"])
+        gets.append(["get", f"{alphabet[i]}.txt", f"testfiles/res_{alphabet[i]}.txt"])
+
+    for get, put in zip(gets, puts):
+        get_filestore_command(HOST, PORT, put)
+        time.sleep(3)
+        get_filestore_command(HOST, PORT, get)
+        time.sleep(3)

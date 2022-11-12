@@ -1,3 +1,4 @@
+import logging
 import socket
 import struct
 import textwrap
@@ -13,6 +14,7 @@ from Node.nodetypes import (
     MembershipListMessage,
     FileReplicationMessage,
     FileVersionMessage,
+    BUFF_SIZE,
 )
 
 
@@ -37,6 +39,56 @@ def trim_len_prefix(message: bytes) -> Tuple[int, bytes]:
     msg_len = struct.unpack(">I", message[:4])[0]
     msg = message[4 : 4 + msg_len]
     return msg_len, msg
+
+
+def _send(msg: Message, addr: Tuple[str, int], logger: logging.Logger = None) -> bool:
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            if s.connect_ex(addr) != 0:
+                raise ConnectionError("Could not connect to {}".format(addr))
+            msg = add_len_prefix(msg.serialize())
+            s.sendall(msg)
+        return True
+
+    except Exception as e:
+        logger.error(f"Error sending message: {e}")
+    finally:
+        return False
+
+
+def _recvall(sock: socket.socket, logger: logging.Logger = None) -> bytes:
+    if logger is None:
+        logger = logging.getLogger(__name__)
+    # use popular method of recvall
+    data = bytearray()
+    rec = sock.recv(BUFF_SIZE)
+    # remove the length prefix
+    msg_len, msg = trim_len_prefix(rec)
+    data.extend(msg)
+    # read the rest of the data, if any
+    while len(data) < msg_len:
+        msg = sock.recv(BUFF_SIZE)
+        if not msg:
+            break
+        data.extend(msg)
+    logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
+    return data
+
+
+def _send_file_err(sock, member, file_name):
+    # send error message
+    error_message = FileMessage(
+        MessageType.FILE_ERROR,
+        member.host,
+        member.port,
+        member.timestamp,
+        file_name,
+        -1,
+        b"",
+    )
+    sock.sendall(add_len_prefix(error_message.serialize()))
 
 
 def get_any_open_port() -> int:

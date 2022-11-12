@@ -16,8 +16,7 @@ Raises:
     NotImplementedError: If this component of the handler is a WIP
     ValueError: If the message type is not recognized
 """
-
-
+import logging
 import socketserver
 import socket
 import time
@@ -49,6 +48,8 @@ from .utils import (
     in_blue,
     trim_len_prefix,
     get_message_from_bytes,
+    _recvall,
+    _send,
 )
 
 if TYPE_CHECKING:
@@ -61,36 +62,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
     election_lock = Lock()
     claim_leader_timestamp = 0
     claim_leader_lock = Lock()
-
-    def _send(self, msg: Message, addr: Tuple[str, int]) -> bool:
-        try:
-            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                if s.connect_ex(addr) != 0:
-                    raise ConnectionError("Could not connect to {}".format(addr))
-                msg = add_len_prefix(msg.serialize())
-                s.sendall(msg)
-            return True
-
-        except Exception as e:
-            self.server.logger.error(f"Error sending message: {e}")
-        finally:
-            return False
-
-    def _recvall(self, sock: socket.socket) -> bytes:
-        # use popular method of recvall
-        data = bytearray()
-        rec = sock.recv(BUFF_SIZE)
-        # remove the length prefix
-        msg_len, msg = trim_len_prefix(rec)
-        data.extend(msg)
-        # read the rest of the data, if any
-        while len(data) < msg_len:
-            msg = sock.recv(BUFF_SIZE)
-            if not msg:
-                break
-            data.extend(msg)
-        self.server.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
-        return data
 
     def _process_ack(self, message: Message) -> None:
         ack_machine = Member(message.ip, message.port, message.timestamp)
@@ -121,16 +92,20 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
 
         if not self.server.is_introducer:
-            # do not store the file locally
+            # store the file locally if not the introducer
+            self.server.file_store.put_file(message.file_name, message.data)
             return
 
+        # if the introducer, choose REP_LEVEL nodes to store the file
+        # and send the file to those nodes
         # choose REPLICATION_LEVEL nodese
         # store the file on those nodes
         membership_list_size = len(self.server.membership_list)
         replication_factor = get_replication_level(
-            membership_list_size, REPLICATION_LEVEL
+            membership_list_size - 1, REPLICATION_LEVEL  # don't count self
         )
-        nodes_to_store = random.sample(self.server.membership_list, replication_factor)
+        list_without_self = self.server.membership_list - [self.server.member]
+        nodes_to_store = random.sample(list_without_self, replication_factor)
         tried_nodes = []
 
         while replication_factor > 0:
@@ -287,6 +262,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                         my_file.version,
                         my_file.file_content,
                     )
+                    print(f"Replying with {file_message}")
                     self.request.sendall(add_len_prefix(file_message.serialize()))
             return
 
@@ -450,7 +426,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                 self.server.timestamp,
             )
             addr = (message.ip, message.port)
-            self._send(ack_message, addr)
+            _send(ack_message, addr, logger=self.server.logger)
 
         # handle PONG (ack)
         elif message.message_type == MessageType.PONG:
@@ -563,7 +539,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
     def handle(self):
         self.server.logger.debug("Handling request from {}".format(self.client_address))
-        data = self._recvall(self.request)
+        data = _recvall(self.request, logger=self.server.logger)
         data = data.strip()
 
         if len(data) == 0:
@@ -615,7 +591,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
             file.file_content,
         )
         # send the message
-        self._send(put_message, (message.ip, message.port))
+        message_addr = (message.ip, message.port)
+        _send(put_message, message_addr, logger=self.server.logger)
         # reply with FILE_REPLICATION_ACK
         ack_message = FileReplicationMessage(
             MessageType.FILE_REPLICATION_ACK,

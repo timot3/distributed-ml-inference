@@ -13,7 +13,9 @@ if __name__ == "__main__":
     logging.basicConfig(
         level=logging.INFO,
     )
-    formatter = logging.Formatter("%(name)s:[%(levelname)-8s] %(message)s")
+    formatter = logging.Formatter(
+        "[%(filename)s:%(lineno)d]:[%(levelname)-8s] %(message)s"
+    )
 
     for handler in logging.root.handlers:
         handler.setFormatter(formatter)
@@ -29,9 +31,6 @@ if __name__ == "__main__":
         INTRODUCER_HOST, INTRODUCER_PORT = "127.0.0.1", 8080
 
     else:
-        # get the Node ID from the environment variable
-        node_id = os.environ["NODE_ID"]
-
         # get self ip address
         self_ip = socket.gethostbyname(socket.gethostname())
         HOST, PORT = self_ip, 8080

@@ -34,6 +34,7 @@ from .utils import (
     trim_len_prefix,
     get_message_from_bytes,
     in_green,
+    _recvall,
 )
 
 
@@ -297,22 +298,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # return the two nodes before self
         return [self.membership_list[idx - 1], self.membership_list[idx - 2]]
 
-    def _recvall(self, sock: socket.socket) -> bytes:
-        # use popular method of recvall
-        data = bytearray()
-        rec = sock.recv(BUFF_SIZE)
-        # remove the length prefix
-        msg_len, msg = trim_len_prefix(rec)
-        data.extend(msg)
-        # read the rest of the data, if any
-        while len(data) < msg_len:
-            msg = sock.recv(BUFF_SIZE)
-            if not msg:
-                break
-            data.extend(msg)
-        self.logger.debug(f"Received {len(data)} bytes from {sock.getpeername()}")
-        return data
-
     def _send(self, msg: Message, member: Member, recv=False) -> Any:
         """
         Send a message to a member
@@ -322,12 +307,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(1)
+                # s.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
                 s.connect((member.ip, member.port))
                 msg = add_len_prefix(msg.serialize())
                 s.sendall(msg)
                 if recv:
-                    data = self._recvall(s)
+                    data = _recvall(s, logger=self.logger)
                     return get_message_from_bytes(data)
                 else:
                     return True
@@ -336,11 +321,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 in_red("Failed to send message to member {}: {}".format(member, e))
             )
             # print the stack trace
+            traceback.print_exc()
             return None
 
     def broadcast_to(
         self, message: Message, members: List[Member], recv=False
-    ) -> Dict[Member, bool]:
+    ) -> Dict[Member, Any]:
         """
         Broadcast a message to all `members`
         :param message: the message to broadcast
@@ -356,6 +342,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
                 for neighbor in members
             }
+            # for future in concurrent.futures.as_completed(future_to_member, timeout=HEARTBEAT_WATCHDOG_TIMEOUT):
             for future in concurrent.futures.as_completed(future_to_member):
                 member = future_to_member[future]
                 try:
@@ -433,7 +420,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         # print al the files
         # get the nodes that have the file
-        for file_name in files_on_member.get_file_names():
+        leaving_member_files = files_on_member.get_file_names()
+        for file_name in leaving_member_files:
             # get the latest version the leaving member had
             file_version = files_on_member.get_file_version(file_name)
             # choose two unique nodes from membership list
@@ -509,7 +497,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             print(resp)
 
         end_time = time.time()
-        print(in_green(f"Rereplicated {file_name} in {end_time - start_time}s"))
+        print(
+            in_green(f"Rereplicated {leaving_member_files} in {end_time - start_time}s")
+        )
 
     def process_leave(self, message, leaving_member: Member) -> None:
         """
