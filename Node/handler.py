@@ -26,20 +26,22 @@ import random
 from threading import Lock
 
 from FileStore.FileStore import File
+from Node.messages import (
+    FileMessage,
+    FileReplicationMessage,
+    FileVersionMessage,
+    LSMessage,
+    MembershipListMessage,
+    Message,
+    MessageType,
+)
 from .nodetypes import (
     REPLICATION_LEVEL,
-    FileReplicationMessage,
-    LSMessage,
-    MessageType,
-    Message,
     MembershipList,
     Member,
     HEARTBEAT_WATCHDOG_TIMEOUT,
     BUFF_SIZE,
-    FileMessage,
-    MembershipListMessage,
     ELECT_LEADER_TIMEOUT,
-    FileVersionMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -57,6 +59,13 @@ if TYPE_CHECKING:
 
 
 class NodeHandler(socketserver.BaseRequestHandler):
+    """This class is responsible for handling all the messages that are
+    sent to the node.
+
+    Much of this code is divided based on whether or not the node is an
+    Introducer(leader).
+    """
+
     server: "NodeTCPServer"
     election_timestamp = time.time()
     election_lock = Lock()
@@ -74,7 +83,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
 
     def _process_join(self, message, new_member):
-        if self.server.membership_list.has_machine(new_member):
+        if self.server.membership_list.has_member(new_member):
             self.server.logger.debug(
                 "Machine {} already exists in the membership list".format(new_member)
             )

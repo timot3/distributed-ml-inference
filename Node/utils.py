@@ -4,16 +4,18 @@ import struct
 import textwrap
 import time
 from typing import Tuple
-
-from Node.nodetypes import (
-    LSMessage,
-    bcolors,
-    MessageType,
+from Node.messages import (
     Message,
     FileMessage,
-    MembershipListMessage,
     FileReplicationMessage,
     FileVersionMessage,
+    LSMessage,
+    MembershipListMessage,
+    MessageType,
+)
+
+from Node.nodetypes import (
+    bcolors,
     BUFF_SIZE,
 )
 

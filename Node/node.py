@@ -13,19 +13,21 @@ import random
 
 from FileStore.FileStore import File, FileStore
 from Node.handler import NodeHandler
-from .nodetypes import (
+from Node.messages import (
     FileReplicationMessage,
     LSMessage,
-    MessageType,
+    MembershipListMessage,
     Message,
+    MessageType,
+    FileMessage,
+)
+from .nodetypes import (
     MembershipList,
     Member,
     HEARTBEAT_WATCHDOG_TIMEOUT,
     BUFF_SIZE,
     DnsDaemonPortID,
     VM1_URL,
-    MembershipListMessage,
-    FileMessage,
 )
 from .utils import (
     add_len_prefix,
@@ -211,7 +213,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         It does this by sending pings to neighbors
         If a neighbor does not respond to a ping, it is removed from the membership list
         And a LEAVE message is broadcast to all neighbors
-        :return: Never returnse
+        :return: Never returns
         """
         while True:
             time.sleep(HEARTBEAT_WATCHDOG_TIMEOUT)
