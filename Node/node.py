@@ -52,7 +52,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         slow_mode=False,
     ):
         # call the super class constructor
-        super().__init__((host, port), None, bind_and_activate=False)
+        super().__init__((host, port), NodeHandler, bind_and_activate=False)
 
         self.host = host
         self.port = port
@@ -63,6 +63,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # initialized when the node joins the ring
         self.introducer_host = None
         self.introducer_port = None
+
+        self.leader_host = self.host
+        self.leader_port = self.port
 
         # initialized when the node joins the ring
         self.timestamp: int = 0
@@ -81,9 +84,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.file_store = FileStore()
 
-        # set the handler class
-        self.RequestHandlerClass = NodeHandler
-        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
 
     def validate_request(self, request, message) -> bool:
@@ -94,7 +95,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             self.logger.info("Not in ring yet. Ignoring message: {}".format(message))
             return False
 
-        super().validate_request(request, message)
+        return True
 
     def join_network(self, introducer_host="localhost", introducer_port=8080) -> bool:
         """
@@ -311,8 +312,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 # s.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
                 s.connect((member.ip, member.port))
-                msg = add_len_prefix(msg.serialize())
-                s.sendall(msg)
+                msg_bytes = add_len_prefix(msg.serialize())
+                s.sendall(msg_bytes)
                 if recv:
                     data = _recvall(s, logger=self.logger)
                     return get_message_from_bytes(data)
@@ -418,6 +419,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         leaving_member = self.membership_list.get_machine(member)
         if leaving_member is None:
             self.logger.warning(f"Leaving member {member} not found in membership list")
+            return
         files_on_member = leaving_member.files
 
         # print al the files
@@ -449,6 +451,11 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             if member_with_file.is_same_machine_as(self.member):
                 # construct PUT message with file
                 file = self.file_store.get_file(file_name)
+                if file is None:
+                    self.logger.error(
+                        f"File {file_name} not found in file store, but was found in membership list"
+                    )
+                    continue
                 put_message = FileMessage(
                     MessageType.PUT,
                     self.member.ip,

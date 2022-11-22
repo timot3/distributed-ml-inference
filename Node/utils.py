@@ -3,7 +3,7 @@ import socket
 import struct
 import textwrap
 import time
-from typing import Tuple
+from typing import Optional, Tuple, Union
 from Node.messages import (
     Message,
     FileMessage,
@@ -43,15 +43,17 @@ def trim_len_prefix(message: bytes) -> Tuple[int, bytes]:
     return msg_len, msg
 
 
-def _send(msg: Message, addr: Tuple[str, int], logger: logging.Logger = None) -> bool:
+def _send(
+    msg: Message, addr: Tuple[str, int], logger: Optional[logging.Logger] = None
+) -> bool:
     if logger is None:
         logger = logging.getLogger(__name__)
     try:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             if s.connect_ex(addr) != 0:
                 raise ConnectionError("Could not connect to {}".format(addr))
-            msg = add_len_prefix(msg.serialize())
-            s.sendall(msg)
+            msg_bytes = add_len_prefix(msg.serialize())
+            s.sendall(msg_bytes)
         return True
 
     except Exception as e:
@@ -60,7 +62,7 @@ def _send(msg: Message, addr: Tuple[str, int], logger: logging.Logger = None) ->
         return False
 
 
-def _recvall(sock: socket.socket, logger: logging.Logger = None) -> bytes:
+def _recvall(sock: socket.socket, logger: Optional[logging.Logger] = None) -> bytearray:
     if logger is None:
         logger = logging.getLogger(__name__)
     # use popular method of recvall
@@ -233,7 +235,7 @@ def is_fileversion_message(message_type: int) -> bool:
     return message_type == MessageType.GET_VERSIONS or message_type == MessageType.GET
 
 
-def get_message_from_bytes(data: bytes) -> Message:
+def get_message_from_bytes(data: Union[bytes, bytearray]) -> Message:
     """
     Factory method to get either a Message, FileStoreMessage, or ElectionMessage
     from a byte array.
@@ -276,12 +278,12 @@ def get_message_from_bytes(data: bytes) -> Message:
 
 
 # Useful for displaying/debugging purposes, not used for functionality
-ip_url_dict = {
-    socket.gethostbyname(
-        f"fa22-cs425-25{i:02}.cs.illinois.edu"
-    ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
-    for i in range(1, 10)
-}
+# ip_url_dict = {
+#     socket.gethostbyname(
+#         f"fa22-cs425-25{i:02}.cs.illinois.edu"
+#     ): f"fa22-cs425-25{i:02}.cs.illinois.edu"
+#     for i in range(1, 10)
+# }
 
 
 def get_replication_level(num_nodes, replication_factor):

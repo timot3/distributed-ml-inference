@@ -66,11 +66,21 @@ class NodeHandler(socketserver.BaseRequestHandler):
     Introducer(leader).
     """
 
-    server: "NodeTCPServer"
-    election_timestamp = time.time()
-    election_lock = Lock()
-    claim_leader_timestamp = 0
-    claim_leader_lock = Lock()
+    def __init__(self, request, client_address, server: "NodeTCPServer"):
+        self.request = request
+        self.client_address = client_address
+        self.server = server
+
+        self.election_timestamp = time.time()
+        self.election_lock = Lock()
+        self.claim_leader_timestamp = 0
+        self.claim_leader_lock = Lock()
+
+        self.setup()
+        try:
+            self.handle()
+        finally:
+            self.finish()
 
     def _process_ack(self, message: Message) -> None:
         ack_machine = Member(message.ip, message.port, message.timestamp)
@@ -146,6 +156,11 @@ class NodeHandler(socketserver.BaseRequestHandler):
                     # find the node in the membership list
                     # and update the files that it has
                     node_member = self.server.membership_list.get_machine(node)
+                    if node_member is None:
+                        self.server.logger.error(
+                            f"PROCESS_PUT: Could not find {node} in membership list"
+                        )
+                        continue
                     node_member.files.put_file(message.file_name, b"")
                     replication_factor -= 1
 
@@ -320,6 +335,19 @@ class NodeHandler(socketserver.BaseRequestHandler):
         if self.server.member.is_same_machine_as(member_with_latest_version):
             # get the file
             latest_file = self.server.file_store.get_file(message.file_name)
+            if latest_file is None:
+                error_message = FileMessage(
+                    MessageType.FILE_ERROR,
+                    self.server.host,
+                    self.server.port,
+                    self.server.timestamp,
+                    message.file_name,
+                    0,
+                    b"",
+                )
+
+                self.request.sendall(add_len_prefix(error_message.serialize()))
+                return
             file_message = FileMessage(
                 MessageType.FILE_ACK,
                 self.server.host,
@@ -333,6 +361,9 @@ class NodeHandler(socketserver.BaseRequestHandler):
             return
 
         # request the latest version
+        if version is None:
+            version = -1
+
         get_message = FileVersionMessage(
             MessageType.GET,
             self.server.host,
