@@ -1,6 +1,9 @@
 from typing import Union
 from ML.modeltypes import DatasetType, MLModelType
 from Node.messages import MessageType, Message
+from PIL import Image
+
+from io import BytesIO
 
 import struct
 
@@ -130,17 +133,38 @@ class QueryModelMessage(MLMessage):
         dataset_type: DatasetType,
         model_type: MLModelType,
         queryid: int,
+        image: Image.Image,
     ):
         super().__init__(
             MessageType.QUERY_MODEL, ip, port, timestamp, dataset_type, model_type
         )
+        self.image = image
 
     def __str__(self):
         return f"{super().__str__()}"
 
     def serialize(self) -> bytes:
-        return super().serialize()
+        # convert the image to bytes
+        img_bytes = self.image.tobytes()
+        # get the hash of img_bytes
+        img_hash = hash(img_bytes)
+        # truncate the hash to a long (8 bytes) -- this will be the queryid
+        queryid = img_hash & 0xFFFFFFFFFFFFFFFF
+        img_len = len(img_bytes)
+
+        query_model_struct = struct.Struct(f"QQ{img_len}s")
+        query_model_bytes = query_model_struct.pack(img_hash, img_len, img_bytes)
+
+        return super().serialize() + query_model_bytes
 
     @classmethod
     def deserialize(cls, data: Union[bytes, bytearray]) -> "QueryModelMessage":
-        return cls(*super().deserialize(data)[1:])
+        parent_msg = super().deserialize(data)
+        # get the queryid and image length
+        queryid, img_len = struct.unpack_from("!QQ", data, ml_struct.size)
+        # get the image bytes
+        img_bytes = struct.unpack_from(f"{img_len}s", data, ml_struct.size + 16)[0]
+        # convert the image bytes to an image
+
+        img = Image.open(BytesIO(img_bytes))
+        return cls(*parent_msg[1:], queryid, img)
