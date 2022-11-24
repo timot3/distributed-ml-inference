@@ -85,7 +85,7 @@ def _send_file_err(sock, member, file_name):
     # send error message
     error_message = FileMessage(
         MessageType.FILE_ERROR,
-        member.host,
+        member.ip,
         member.port,
         member.timestamp,
         file_name,
