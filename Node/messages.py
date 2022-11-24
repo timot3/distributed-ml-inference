@@ -16,7 +16,6 @@ class MessageType(IntEnum):
     DISCONNECTED = 5  # sent to node that is disconnected
 
     # Election messages
-    # todo @zhuxuan: add election messages
     ELECT_PING = 6  # send to all nodes that are lower in id
     CLAIM_LEADER_PING = 8  # The sender claims to be the leader
     CLAIM_LEADER_ACK = 7
@@ -35,6 +34,13 @@ class MessageType(IntEnum):
     # Membership messages
     NEW_NODE = 18
     MEMBERSHIP_LIST = 19
+
+    # Machine learning messages
+    REGISTER_MODEL = 20  # sent to nodes to init a new model
+    REGISTER_MODEL_ACK = 21  # sent to leader when model has been "trained" (initialized)
+
+    QUERY_MODEL = 22  # sent to leader to query a model, and forwarded to the node
+    QUERY_MODEL_RESULT = 23  # sent from node to leader with the result of the query, and forwarded to the client
 
 
 # join message has the following fields:

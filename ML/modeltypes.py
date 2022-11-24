@@ -4,6 +4,7 @@ from typing import List, Optional, Tuple
 import json
 import requests
 import numpy as np
+from PIL import Image
 
 from ML.utils import load_learner
 
@@ -22,29 +23,6 @@ class DatasetType(IntEnum):
 class MLModelType(IntEnum):
     CLASSIFIER = 0
     OBJECT_DETECTION = 1
-
-
-class Image:
-    """Image class"""
-
-    def __init__(
-        self,
-        image_label: str,
-        image_dimensions: Tuple[int, int],
-        image_path: str = "",
-        image_data: Optional[np.ndarray] = None,
-    ):
-        # read the bytes from the image path
-
-        self.image_label = image_label
-        self.image_dimensions = image_dimensions
-        if len(image_path) > 0 and image_data is None:
-            # read the file at image_path into a ndarray
-            raise ToDoException("TODO: read the file at image_path into a ndarray")
-
-    @classmethod
-    def from_bytes(cls, image_label, image_dimensions, image_data):
-        raise ToDoException("TODO: make sure that image_data is set properly")
 
 
 class MLModel:
@@ -70,10 +48,10 @@ class MLModel:
     def train():
         raise NotImplementedError
 
-    def infer_batch(self, batch_size: int, images: List[Image]):
+    def infer_batch(self, batch_size: int, images):
         raise NotImplementedError
 
-    def infer(self, image: Image):
+    def infer(self, image):
         return self.infer_batch(1, [image])[0]
 
 
@@ -102,7 +80,7 @@ class ClassifierModel(MLModel):
     def train(self):
         self._load()
 
-    def infer_batch(self, batch_size: int, images: List[Image]):
+    def infer_batch(self, batch_size: int, images):
         raise NotImplementedError
 
     def infer(self, image: Image):
