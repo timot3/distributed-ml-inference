@@ -1,3 +1,5 @@
+import random
+import time
 from enum import IntEnum
 import os
 from typing import List, Optional, Tuple
@@ -30,7 +32,7 @@ class MLModel:
         self.model_type = model_type
         self.model_dataset = model_dataset
         self.model = None
-        self.batch_size = 1 # TODO: Implement a method to update the batch size
+        self.batch_size = 1  # TODO: Implement a method to update the batch size
         self._download_dataset()
 
     def _download_dataset(self):
@@ -46,7 +48,7 @@ class MLModel:
     def _load(self, model_pkl_path: str):
         raise NotImplementedError
 
-    def train():
+    def train(self):
         raise NotImplementedError
 
     def infer_batch(self, batch_size: int, images):
@@ -87,6 +89,29 @@ class ClassifierModel(MLModel):
 
     def infer_batch(self, batch_size: int, images):
         raise NotImplementedError
+
+    def infer(self, image: Image):
+        return self.infer_batch(1, [image])[0]
+
+
+class DummyModel(MLModel):
+    def __init__(self, model_dataset: DatasetType):
+        super().__init__(MLModelType.CLASSIFIER, model_dataset)
+
+    def _load(self, model_pkl_path: str):
+        pass
+
+    def train(self):
+        pass
+
+    def infer_batch(self, batch_size: int, images):
+        time.sleep(random.random())
+        alphabet = "abcdefghijklmnopqrstuvwxyz"
+
+        def select_five_chars():
+            return "".join(random.sample(alphabet, 5))
+
+        return [select_five_chars() for _ in range(batch_size)]
 
     def infer(self, image: Image):
         return self.infer_batch(1, [image])[0]

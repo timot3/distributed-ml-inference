@@ -23,7 +23,7 @@ import struct
 
 TODO: Add additional fields
 
-Tentatively, the dataset type is not being used since we have a 1 to 1 
+Tentatively, the dataset type is not being used since we have a 1 to 1
 mapping between the model and dataset.
 """
 
@@ -40,8 +40,8 @@ class MLMessage(Message):
         timestamp: int,
         dataset_type: DatasetType,
         model_type: MLModelType,
-        file_idx_start: int, # Assumes that we sort the list of filenames 
-        file_idx_end: int 
+        file_idx_start: int,  # Assumes that we sort the list of filenames
+        file_idx_end: int,
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.dataset_type = dataset_type
@@ -72,7 +72,7 @@ class MLMessage(Message):
                 dataset_type,
                 model_type,
                 file_idx_start,
-                file_idx_end
+                file_idx_end,
             ) = ml_struct.unpack_from(data)
             return cls(
                 MessageType(message_type),
@@ -82,7 +82,7 @@ class MLMessage(Message):
                 DatasetType(dataset_type),
                 MLModelType(model_type),
                 file_idx_start,
-                file_idx_end
+                file_idx_end,
             )
         except struct.error:
             # print the length of the data and the data received
