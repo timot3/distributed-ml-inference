@@ -65,7 +65,7 @@ class MLModel:
 class ClassifierModel(MLModel):
     def __init__(self, model_dataset: DatasetType):
         super().__init__(MLModelType.CLASSIFIER, model_dataset)
-        self._download_dataset()
+        self.train()
 
     def _load(self, model_pkl_path: str):
         # load the model from the pkl file into a fastai vision_learner
