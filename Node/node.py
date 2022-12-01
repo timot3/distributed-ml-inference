@@ -6,14 +6,12 @@ import threading
 import time
 import traceback
 from typing import Any, List, Optional, Tuple, Dict
-from ML.modeltypes import ModelCollection
 
 # from nodeelectinfo import NodeElectInfo
 
 import random
 
 from FileStore.FileStore import File, FileStore
-from ML.modeltypes import ClassifierModel, DatasetType, DummyModel
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -90,15 +88,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
 
-        self.model_collection = ModelCollection(self)
-
         # init the load balancer, if necessart
         if self.is_introducer:
             self.load_balancer = LoadBalancer(self)
-
-        # init the models
-        self.model1 = DummyModel(DatasetType.OXFORD_PETS)
-        self.model2 = DummyModel(DatasetType.CIFAR10)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -355,7 +347,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         member_to_response = {}
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(members)) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
@@ -390,35 +382,17 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def send_ls(self, file_names: List[str] = [], display_res=True) -> Dict[Member, Any]:
+    def send_ls(self, display_res=True) -> Dict[Member, Any]:
         """
         Send a LS message to all neighbors
-        :param file_names: The file names to search for
-        :param display_res: Whether or not to display the results
         :return: None
         """
-        files_to_search = []
-        if len(file_names) > 0:
-            # convert the str filename into a file object with no content
-            for file_name in file_names:
-                files_to_search.append(File(file_name, b""))
-
         ls_message = LSMessage(
-            MessageType.LS,
-            self.member.ip,
-            self.member.port,
-            self.member.timestamp,
-            files_to_search,
+            MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
         )
-
         res = self.broadcast_to(ls_message, self.membership_list, recv=True)
         if display_res:
             for member, message in res.items():
-                if message is None:
-                    continue
-                if message.message_type == MessageType.FILE_ERROR:
-                    self.logger.debug(f"Error: {file_names} not found on {member}")
-                    continue
                 files_str = ", ".join(str(file) for file in message.files)
                 print(f"{member}: {files_str}")
 
