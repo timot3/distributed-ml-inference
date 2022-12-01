@@ -17,21 +17,34 @@ NUM_VM = 10
 
 
 def run_wrapper(args: list):
-    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
+    # https://stackoverflow.com/a/4417735
+    # p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, shell=True)
 
-    sel = selectors.DefaultSelector()
-    sel.register(p.stdout, selectors.EVENT_READ)
-    sel.register(p.stderr, selectors.EVENT_READ)
+    # sel = selectors.DefaultSelector()
+    # sel.register(p.stdout, selectors.EVENT_READ)
+    # sel.register(p.stderr, selectors.EVENT_READ)
 
-    while True:
-        for key, _ in sel.select():
-            data = key.fileobj.read1().decode()
-            if not data:
-                exit()
-            if key.fileobj is p.stdout:
-                print("STDOUT: " + data, end="")
-            else:
-                print("STDERR: " + data, end="", file=sys.stderr)
+    # while True:
+    #     for key, _ in sel.select():
+    #         data = key.fileobj.read1().decode()
+    #         if not data:
+    #             exit()
+    #         if key.fileobj is p.stdout:
+    #             print("STDOUT: " + data, end="")
+    #         else:
+    #             print("STDERR: " + data, end="", file=sys.stderr)
+    def execute(cmd):
+        popen = subprocess.Popen(cmd, stdout=subprocess.PIPE, universal_newlines=True)
+        for stdout_line in iter(popen.stdout.readline, ""):
+            yield stdout_line
+        popen.stdout.close()
+        return_code = popen.wait()
+        if return_code:
+            raise subprocess.CalledProcessError(return_code, cmd)
+
+    # Example
+    for path in execute(["locate", "a"]):
+        print(path, end="")
 
 
 def main():

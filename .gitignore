@@ -14,3 +14,11 @@ playground.ipynb
 testfiles/*.txt
 testfiles/*.test
 testfiles/*.en.tgz
+
+# ML models
+ML/models/*.pkl
+
+# type checking
+.pyre/
+.watchmanconfig
+.pyre_configuration

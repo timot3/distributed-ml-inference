@@ -29,7 +29,7 @@ class NodeElectInfo:
 
     def update_claim_leader_timestamp(self) -> None:
         with self._claim_leader_lock:
-            self._claim_leader_lock = int(time.time())
+            self._claim_leader_timestamp = int(time.time())
 
     def init_pending_nodes(self, nodes: List[Tuple[str, str, int]]) -> None:
         with self._pending_ack_nodes_lock:
