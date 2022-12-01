@@ -20,7 +20,13 @@ import struct
 == unique to ML messages ==
 1 byte for the model type
 1 byte for the dataset type
+
+TODO: Add additional fields
+
+Tentatively, the dataset type is not being used since we have a 1 to 1 
+mapping between the model and dataset.
 """
+
 ML_BASE_FORMAT = "!I4sHI"
 ml_struct = struct.Struct(ML_BASE_FORMAT)
 
@@ -34,10 +40,14 @@ class MLMessage(Message):
         timestamp: int,
         dataset_type: DatasetType,
         model_type: MLModelType,
+        file_idx_start: int, # Assumes that we sort the list of filenames 
+        file_idx_end: int 
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.dataset_type = dataset_type
         self.model_type = model_type
+        self.file_idx_start = file_idx_start
+        self.file_idx_end = file_idx_end
 
     def __str__(self):
         return f"{super().__str__()} dataset_type={self.dataset_type} model_type={self.model_type}"
@@ -47,6 +57,8 @@ class MLMessage(Message):
             super().serialize()
             + self.dataset_type.to_bytes(1, "big")
             + self.model_type.to_bytes(1, "big")
+            + self.file_idx_start.to_bytes(1, "big")
+            + self.file_idx_end.to_bytes(1, "big")
         )
 
     @classmethod
@@ -57,8 +69,10 @@ class MLMessage(Message):
                 ip,
                 port,
                 timestamp,
-                model_type,
                 dataset_type,
+                model_type,
+                file_idx_start,
+                file_idx_end
             ) = ml_struct.unpack_from(data)
             return cls(
                 MessageType(message_type),
@@ -67,6 +81,8 @@ class MLMessage(Message):
                 timestamp,
                 DatasetType(dataset_type),
                 MLModelType(model_type),
+                file_idx_start,
+                file_idx_end
             )
         except struct.error:
             # print the length of the data and the data received
@@ -74,54 +90,6 @@ class MLMessage(Message):
                 f"Error deserializing MLMessage: {len(data)} received, with data: {data}"
             )
             raise struct.error("Error deserializing MLMessage")
-
-
-class RegisterModelMessage(MLMessage):
-    def __init__(
-        self,
-        ip: str,
-        port: int,
-        timestamp: int,
-        dataset_type: DatasetType,
-        model_type: MLModelType,
-    ):
-        super().__init__(
-            MessageType.REGISTER_MODEL, ip, port, timestamp, dataset_type, model_type
-        )
-
-    def __str__(self):
-        return f"{super().__str__()}"
-
-    def serialize(self) -> bytes:
-        return super().serialize()
-
-    @classmethod
-    def deserialize(cls, data: Union[bytes, bytearray]) -> "RegisterModelMessage":
-        return cls(*super().deserialize(data)[1:])
-
-
-class RegisterModelAckMessage(MLMessage):
-    def __init__(
-        self,
-        ip: str,
-        port: int,
-        timestamp: int,
-        dataset_type: DatasetType,
-        model_type: MLModelType,
-    ):
-        super().__init__(
-            MessageType.REGISTER_MODEL_ACK, ip, port, timestamp, dataset_type, model_type
-        )
-
-    def __str__(self):
-        return f"{super().__str__()}"
-
-    def serialize(self) -> bytes:
-        return super().serialize()
-
-    @classmethod
-    def deserialize(cls, data: Union[bytes, bytearray]) -> "RegisterModelAckMessage":
-        return cls(*super().deserialize(data)[1:])
 
 
 class QueryModelMessage(MLMessage):

@@ -30,6 +30,7 @@ class MLModel:
         self.model_type = model_type
         self.model_dataset = model_dataset
         self.model = None
+        self.batch_size = 1 # TODO: Implement a method to update the batch size
         self._download_dataset()
 
     def _download_dataset(self):
@@ -49,10 +50,14 @@ class MLModel:
         raise NotImplementedError
 
     def infer_batch(self, batch_size: int, images):
+        # learn.predict
         raise NotImplementedError
 
     def infer(self, image):
         return self.infer_batch(1, [image])[0]
+
+    def set_batch_size(self, val: int):
+        self.batch_size = val
 
 
 class ClassifierModel(MLModel):
