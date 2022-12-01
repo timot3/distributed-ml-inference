@@ -6,7 +6,8 @@ import logging
 from time import sleep
 
 from Node.nodetypes import DnsDaemonPortID, VM1_URL
-from Node.utils import ip_url_dict
+
+# from Node.utils import ip_url_dict
 
 """
 The class can return a dead leader, so nodes checking for the leader still
@@ -42,7 +43,7 @@ class DNSDaemon:
             while True:
                 self.electionRoutine_inner(sock)
 
-    def electionRoutine_inner(self, sock: socket.SocketType):
+    def electionRoutine_inner(self, sock: socket.socket):
         # set up socket, wait for new leader announced.
         sock.listen()
         conn, addr = sock.accept()
@@ -72,7 +73,7 @@ class DNSDaemon:
             while True:
                 self.getLeaderRoutine_inner(sock)
 
-    def getLeaderRoutine_inner(self, sock: socket.SocketType):
+    def getLeaderRoutine_inner(self, sock: socket.socket):
         # set up socket, wait for new leader announced.
         sock.listen()
         conn, addr = sock.accept()

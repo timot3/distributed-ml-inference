@@ -52,7 +52,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         slow_mode=False,
     ):
         # call the super class constructor
-        super().__init__((host, port), None, bind_and_activate=False)
+        super().__init__((host, port), NodeHandler, bind_and_activate=False)
 
         self.host = host
         self.port = port
@@ -63,6 +63,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # initialized when the node joins the ring
         self.introducer_host = None
         self.introducer_port = None
+
+        self.leader_host = self.host
+        self.leader_port = self.port
 
         # initialized when the node joins the ring
         self.timestamp: int = 0
@@ -81,9 +84,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.file_store = FileStore()
 
-        # set the handler class
-        self.RequestHandlerClass = NodeHandler
-        self.dnsdaemon_ip = socket.gethostbyname(VM1_URL)
+        self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
 
     def validate_request(self, request, message) -> bool:
@@ -94,7 +95,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             self.logger.info("Not in ring yet. Ignoring message: {}".format(message))
             return False
 
-        super().validate_request(request, message)
+        return True
 
     def join_network(self, introducer_host="localhost", introducer_port=8080) -> bool:
         """
@@ -202,6 +203,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         )
         self.broadcast_to_neighbors(leave_message)
         self.membership_list = MembershipList([])
+
+        # delete all files in file store
+        self.file_store = FileStore()
 
         # disconnect the introducer socket
         self.in_ring = False
@@ -311,8 +315,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
                 # s.settimeout(HEARTBEAT_WATCHDOG_TIMEOUT)
                 s.connect((member.ip, member.port))
-                msg = add_len_prefix(msg.serialize())
-                s.sendall(msg)
+                msg_bytes = add_len_prefix(msg.serialize())
+                s.sendall(msg_bytes)
                 if recv:
                     data = _recvall(s, logger=self.logger)
                     return get_message_from_bytes(data)
@@ -414,11 +418,13 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # we need tof ind the files in the membership lsit
         # and then rereplicate them
         start_time = time.time()
-        adjusted_membership_list = self.membership_list - [member]
+        adjusted_membership_list = self.membership_list - [member] - [self.member]
         leaving_member = self.membership_list.get_machine(member)
         if leaving_member is None:
             self.logger.warning(f"Leaving member {member} not found in membership list")
+            return
         files_on_member = leaving_member.files
+        print(f"Files on member {member}: {files_on_member}")
 
         # print al the files
         # get the nodes that have the file
@@ -428,10 +434,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             file_version = files_on_member.get_file_version(file_name)
             # choose two unique nodes from membership list
             # one that has the file and one that does not
-            nodes_with_file = self.membership_list.find_machines_with_file(
+            nodes_with_file = adjusted_membership_list.find_machines_with_file(
                 file_name, file_version=file_version
             )
-            machines_without_file = self.membership_list.find_machines_without_file(
+            machines_without_file = adjusted_membership_list.find_machines_without_file(
                 file_name, file_version=file_version
             )
             if len(machines_without_file) == 0 or len(nodes_with_file) == 0:
@@ -444,37 +450,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             print(
                 f"Chose {member_with_file} to send {file_name} to {member_without_file}"
             )
-            # if the member with the file is the introducer, then we need to send the file
-            # to the member without the file
-            if member_with_file.is_same_machine_as(self.member):
-                # construct PUT message with file
-                file = self.file_store.get_file(file_name)
-                put_message = FileMessage(
-                    MessageType.PUT,
-                    self.member.ip,
-                    self.member.port,
-                    self.member.timestamp,
-                    file.file_name,
-                    file.version,
-                    file.file_content,
-                )
-                self._send(put_message, member_without_file)
-                print(f"Sent {file_name} to {member_without_file}")
 
-                # wait for response
-                # if response is successful, then we need to update the membership list
-                # and the file store
-                # in order to not replicate the data of the file,
-                # create a new object with the same file name and version
-                # but with no content
-
-                new_file = File(file.file_name, b"", version=file.version)
-                member_without_file.files.put_file(new_file, b"")
-                end_time = time.time()
-                print(in_green(f"Rereplicated {file_name} in {end_time - start_time}s"))
-                return
-
-            # else:
             # send a FileReplicationMessage to the node that has the file
             # so that it can send the file to the node that does not have the file
             file_replication_message = FileReplicationMessage(

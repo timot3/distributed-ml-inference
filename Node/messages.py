@@ -1,7 +1,7 @@
 import struct
 import socket
 from enum import Enum, IntEnum
-from typing import List
+from typing import List, Union
 
 from FileStore.FileStore import File
 from Node.nodetypes import MembershipList
@@ -16,7 +16,6 @@ class MessageType(IntEnum):
     DISCONNECTED = 5  # sent to node that is disconnected
 
     # Election messages
-    # todo @zhuxuan: add election messages
     ELECT_PING = 6  # send to all nodes that are lower in id
     CLAIM_LEADER_PING = 8  # The sender claims to be the leader
     CLAIM_LEADER_ACK = 7
@@ -35,6 +34,13 @@ class MessageType(IntEnum):
     # Membership messages
     NEW_NODE = 18
     MEMBERSHIP_LIST = 19
+
+    # Machine learning messages
+    REGISTER_MODEL = 20  # sent to nodes to init a new model
+    REGISTER_MODEL_ACK = 21  # sent to leader when model has been "trained" (initialized)
+
+    QUERY_MODEL = 22  # sent to leader to query a model, and forwarded to the node
+    QUERY_MODEL_RESULT = 23  # sent from node to leader with the result of the query, and forwarded to the client
 
 
 # join message has the following fields:
@@ -84,7 +90,7 @@ class Message:
         )
 
     @classmethod
-    def deserialize(cls, data: bytes) -> "Message":
+    def deserialize(cls, data: Union[bytes, bytearray]) -> "Message":
         """Convert bytes into message
 
         Args:
@@ -126,7 +132,7 @@ class FileMessage(Message):
         timestamp: int,
         file_name: str,
         version: int,
-        data: bytes,
+        data: Union[bytes, bytearray],
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.file_name = file_name
@@ -149,7 +155,7 @@ class FileMessage(Message):
         return base_message + file_name + version + self.data
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         base_size = communication_struct.size
 
         min_size = base_size + 36
@@ -231,7 +237,7 @@ class FileReplicationMessage(Message):
         return base_message + file_name + from_ip + from_port + from_timestamp
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         base_size = communication_struct.size
 
         min_size = base_size + (32 + 4 + 2 + 4)
@@ -251,7 +257,8 @@ class FileReplicationMessage(Message):
         file_name = file_name.decode("utf-8").strip("\x00")
 
         # get the from_ip
-        from_ip = socket.inet_ntoa(data[base_size + 32 : base_size + 36])
+        from_ip_bytes = bytes(data[base_size + 32 : base_size + 36])
+        from_ip = socket.inet_ntoa(from_ip_bytes)
 
         # get the from_port
         from_port = struct.unpack(">H", data[base_size + 36 : base_size + 38])[0]
@@ -304,7 +311,7 @@ class FileVersionMessage(Message):
         return base_message + file_name + num_versions + versions
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         base_size = communication_struct.size
 
         min_size = base_size + (32 + 4)
@@ -351,7 +358,7 @@ class LSMessage(Message):
         return base_message + ls_files
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         base_message = Message.deserialize(data[: communication_struct.size])
         message_type = base_message.message_type
         ip = base_message.ip
@@ -380,7 +387,7 @@ class ElectionMessage(Message):
         port: int,
         timestamp: int,
     ):
-        super.__init__(self, message_type, ip, port, timestamp)
+        super().__init__(message_type, ip, port, timestamp)
 
 
 class MembershipListMessage(Message):
@@ -407,7 +414,7 @@ class MembershipListMessage(Message):
         return base_message + membership_list_serialized
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         base_size = communication_struct.size
 
         if len(data) < base_size:

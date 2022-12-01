@@ -4,7 +4,8 @@ import socket
 import time
 from typing import List
 
-from Node.nodetypes import FileMessage, Message, MessageType, VM1_URL, FileVersionMessage
+from Node.nodetypes import VM1_URL
+from Node.messages import Message, MessageType, FileMessage, FileVersionMessage
 from Node.utils import get_message_from_bytes, trim_len_prefix, add_len_prefix
 
 BUFF_SIZE = 4096
@@ -79,6 +80,7 @@ def send_file_message(ip, port, file_message: Message, recv=True):
     :param file_message: the filestore message
     :return: None
     """
+    data = b""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
         sock.connect((ip, port))
         sock.sendall(add_len_prefix(file_message.serialize()))

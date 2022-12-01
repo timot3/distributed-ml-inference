@@ -1,5 +1,5 @@
 import struct
-from typing import List, Optional
+from typing import List, Optional, Union
 
 from FileStore.filetypes import MAX_NUM_VERSIONS
 
@@ -10,7 +10,11 @@ class File:
     """
 
     def __init__(
-        self, file_name: str, file_content: bytes, filesize: int = 0, version: int = 0
+        self,
+        file_name: str,
+        file_content: Union[bytes, bytearray],
+        filesize: int = 0,
+        version: int = 0,
     ):
         self.file_name = file_name
         self.file_content = file_content
@@ -43,7 +47,7 @@ class File:
         return name_bytes + b":" + version_bytes + b":" + size_bytes
 
     @classmethod
-    def ls_deserialize(cls, data: bytes):
+    def ls_deserialize(cls, data: Union[bytes, bytearray]):
         # use struct.unpack to unpack the data from bytes
         name, version, size = data.split(b":")
         name = struct.unpack(">32s", name)[0].decode("utf-8")
@@ -73,7 +77,7 @@ class FileStore:
     def __init__(self):
         self.file_map = {}
 
-    def put_file(self, file_name: str, file_content: bytes):
+    def put_file(self, file_name: str, file_content: Union[bytes, bytearray]):
         """
         Add a file to the file store
         """
@@ -138,7 +142,7 @@ class FileStore:
             num_versions = MAX_NUM_VERSIONS
         return self.file_map[file_name][-num_versions:]
 
-    def delete_file(self, file_name) -> File:
+    def delete_file(self, file_name) -> Optional[File]:
         """
         Delete a file from the file store
         :param file_name: The file name to delete

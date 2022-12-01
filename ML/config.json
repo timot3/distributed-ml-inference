@@ -1,0 +1,10 @@
+{
+    "ResNet" : {
+        "model_url": "https://uofi.box.com/s/",
+        "model_dataset": "https://uofi.box.com/s/"
+    },
+    "ImageNet" : {
+        "model_url": "https://uofi.box.com/s/",
+        "model_dataset": "https://uofi.box.com/s/"
+    }
+}

@@ -8,7 +8,7 @@ It also contains useful magic number variables.
 import socket
 import struct
 from enum import Enum, IntEnum
-from typing import List, Any, Optional, Set, Tuple
+from typing import List, Any, Optional, Set, Tuple, Union
 import logging
 from threading import Lock
 
@@ -54,13 +54,13 @@ class bcolors:
 
 
 class Member:
-    def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = None):
+    def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = 0):
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
         self.files: FileStore = FileStore()
 
-        if last_heartbeat is None:
+        if last_heartbeat == 0:
             self.last_heartbeat = timestamp
         else:
             self.last_heartbeat = last_heartbeat
@@ -203,10 +203,10 @@ class MembershipList(list):
 
     def find_machine_with_latest_version(
         self, file_name: str
-    ) -> Tuple[Optional[Member], int]:
+    ) -> Tuple[Optional[Member], Optional[int]]:
         machines = self.find_machines_with_file(file_name)
         if len(machines) == 0:
-            return None
+            return None, None
         machines.sort(key=lambda m: m.files.get_file_version(file_name), reverse=True)
         return machines[0], machines[0].files.get_file_version(file_name)
 
@@ -227,7 +227,7 @@ class MembershipList(list):
         return bytes_str
 
     @classmethod
-    def deserialize(cls, data: bytes):
+    def deserialize(cls, data: Union[bytes, bytearray]):
         # convert the bytes to a string
         membership_list_str = data.decode()
         # split the string into a list of strings
