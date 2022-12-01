@@ -22,6 +22,7 @@ from Node.messages import (
     MessageType,
     FileMessage,
 )
+from .LoadBalancer.LoadBalancer import LoadBalancer
 from .nodetypes import (
     MembershipList,
     Member,
@@ -89,6 +90,10 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # self.election_info = NodeElectInfo()
 
         self.model_collection = ModelCollection(self)
+
+        # init the load balancer, if necessart
+        if self.is_introducer:
+            self.load_balancer = LoadBalancer(self)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]

@@ -59,6 +59,7 @@ class Member:
         self.port: int = port
         self.timestamp: int = timestamp
         self.files: FileStore = FileStore()
+        self.active_queries = List[str]
 
         if last_heartbeat == 0:
             self.last_heartbeat = timestamp
