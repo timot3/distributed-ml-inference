@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 from enum import IntEnum
@@ -58,6 +59,9 @@ class MLModel:
     def infer(self, image):
         return self.infer_batch(1, [image])[0]
 
+    def queue_work(self, item):
+        raise NotImplementedError
+
     def set_batch_size(self, val: int):
         self.batch_size = val
 
@@ -104,8 +108,8 @@ class DummyModel(MLModel):
     def train(self):
         pass
 
-    def infer_batch(self, batch_size: int, images):
-        time.sleep(random.random())
+    async def infer_batch(self, batch_size: int, images):
+        await asyncio.sleep(random.random())
         alphabet = "abcdefghijklmnopqrstuvwxyz"
 
         def select_five_chars():
@@ -113,5 +117,10 @@ class DummyModel(MLModel):
 
         return [select_five_chars() for _ in range(batch_size)]
 
-    def infer(self, image: Image):
-        return self.infer_batch(1, [image])[0]
+    async def infer(self, image: Image):
+        batch_result = await self.infer_batch(1, [image])
+        return batch_result[0]
+
+    def queue_work(self, item):
+        work_done = asyncio.run(self.infer(item))
+        return work_done
