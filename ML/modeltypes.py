@@ -19,7 +19,7 @@ class ToDoException(Exception):
 
 
 class DatasetType(IntEnum):
-    CIFAR10 = 0
+    CIFAR100 = 0
     OXFORD_PETS = 1
 
 
@@ -40,11 +40,11 @@ class MLModel:
         """Download the dataset for the ML model."""
         if self.model_dataset == DatasetType.CIFAR10:
             # download the CIFAR10 dataset
-            raise ToDoException
+            pass
 
         elif self.model_dataset == DatasetType.OXFORD_PETS:
             # download the Oxford Pets dataset
-            raise ToDoException
+            pass
 
     def _load(self, model_pkl_path: str):
         raise NotImplementedError
