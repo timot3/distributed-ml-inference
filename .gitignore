@@ -18,6 +18,10 @@ testfiles/*.en.tgz
 # ML models
 ML/models/*.pkl
 
+# ML data
+ML/datasets/oxford_pets/*.jpg
+ML/datasets/oxford_pets/*.mat
+
 # type checking
 .pyre/
 .watchmanconfig
