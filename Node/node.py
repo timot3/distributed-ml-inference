@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Tuple, Dict
 import random
 
 from FileStore.FileStore import File, FileStore
+from ML.modeltypes import ClassifierModel, DatasetType, DummyModel
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -88,9 +89,13 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
 
-        # init the load balancer, if necessart
+        # init the load balancer, if necessary
         if self.is_introducer:
             self.load_balancer = LoadBalancer(self)
+
+        # init the models
+        self.model1 = DummyModel(DatasetType.OXFORD_PETS)
+        self.model2 = DummyModel(DatasetType.CIFAR10)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
