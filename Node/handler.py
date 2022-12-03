@@ -228,7 +228,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # delete the file locally
             self.server.file_store.delete_file(message.file_name)
 
-    def _process_ls(self, message: FileMessage) -> None:
+    def _process_ls(self, message: LSMessage) -> None:
         """
         Process a LS message and send the list of files
         :param message: The received message
@@ -236,13 +236,38 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         # reply with everything in the filestore
         files = self.server.file_store.get_latest_versions()
+        file_names_stored = [file.file_name for file in files]
+        file_names_requested = [str(file.file_name) for file in message.files]
+
+        print("file_names", file_names_stored)
+        print("Files requested", file_names_requested)
+
+        files_to_send = []
+
+        # parse the files requested in the LSmessage. If no files are requested, send all files
+        if len(file_names_requested) > 0:
+            for requested_file in file_names_requested:
+                if requested_file in file_names_stored:
+                    # get the file from the filestore
+                    file = self.server.file_store.get_file(requested_file)
+                    files_to_send.append(file)
+
+            if len(files_to_send) == 0:
+                self.server.logger.info("No files found")
+                # send a file_error message
+                _send_file_err(
+                    self.request, self.server.member, message.files[0].file_name
+                )
+                return
+        else:
+            files_to_send = files
 
         file_list_message = LSMessage(
             MessageType.LS,
             self.server.host,
             self.server.port,
             self.server.timestamp,
-            files,
+            files_to_send,
         )
 
         self.server.logger.info(f"Replying with {file_list_message}")

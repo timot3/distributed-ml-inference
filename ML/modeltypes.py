@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 from enum import IntEnum
@@ -29,14 +30,14 @@ QUEUE_CAPACITY = 64 # Arbitrary
 class MLModel:
     def __init__(self):
         self.model = None
-        self.batch_size = 1 
+        self.batch_size = 1
 
         # We let the queue be a queue of lists of images.
-        # We do not want insertion to block, so we manually track queue depth rather 
+        # We do not want insertion to block, so we manually track queue depth rather
         # than instantiating it with one.
         self.batch_queue = Queue()
-        # This accomodates having batch size be != 1, and have the design 
-        # infer 1 picture at once - less efficient than inferring entire 
+        # This accomodates having batch size be != 1, and have the design
+        # infer 1 picture at once - less efficient than inferring entire
         # batch but much better load balance
         self.image_fname_queue = Queue()
         # Only useful for defensive programming
@@ -85,7 +86,7 @@ class MLModel:
         self.batch_queue.put(image_list)
         self.enqueue_images()
 
-    # This will be called after an enqueue batch and after inferring 
+    # This will be called after an enqueue batch and after inferring
     # an entire batch.
     def enqueue_images(self):
         # Make sure batch queue has entries
@@ -93,7 +94,7 @@ class MLModel:
         with self.predictions_lock:
             if self.batch_queue.empty():
                 return
-            else: 
+            else:
                 batch = self.batch_queue.get()
             # Slight overengineering to account for possibility that the batch size
             # is changed, even though it shouldn't be in the demo.
@@ -106,10 +107,10 @@ class MLModel:
     def check_batch_successful(self):
         with self.predictions_lock:
             return len(self.output_predictions) == self.cur_batch_size
-                
+
     # Use a thread to run this
     def successful_batch(self):
-        
+
         # TODO: Write this batch's results into SDFS
         # Write self.output_predictions to SDFS
         pass
@@ -129,12 +130,12 @@ class MLModel:
         # Empty queue, wait for it to fill up
         if self.image_fname_queue.empty():
             time.sleep(0.001)
-        
-        else: 
+
+        else:
             img_fname = self.image_fname_queue.get()
             self.infer_single_image(img_fname)
 
-        self.queries += 1 
+        self.queries += 1
 
 
 
@@ -145,7 +146,7 @@ class MLModel:
         pred = self.model.predict(image)
         with self.predictions_lock:
             self.output_predictions.append(self.model.predict(image))
-        return 
+        return
 
 
     def set_batch_size(self, val: int):
@@ -182,7 +183,7 @@ class ClassifierModel(MLModel):
                 config = json.load(config_file)
                 if self.model_type == ModelType.RESNET:
                     model_url = config["ResNet"]["model_url"]
-                else: 
+                else:
                     model_url = config["ImageNet"]["model_url"]
             model_pkl_file = requests.get(model_url).content
             with open(model_pkl_path, "wb") as pkl_file:
@@ -204,7 +205,7 @@ class DummyModel(MLModel):
     def train(self):
         pass
 
-    
+
 class ModelCollection:
     def __init__(self) -> None:
         self.resnet = ClassifierModel(ModelType.RESNET)
@@ -217,17 +218,17 @@ class ModelCollection:
         # Therefore, we can just use local query rates of the 2 models to
         # control this probability.
         self.pick_resnet_prob = 0.5
-    
+
     # To be run by ProbScaleThread
     def update_formula(self):
         # Scaling factor k on probability will equalize the query rate
         # assuming rate is directly proportional to probability of issue
         # We will not immediate scale by this factor to prevent oscillations
-        # Assumption of steady state implies the model should generally not 
+        # Assumption of steady state implies the model should generally not
         # deal with cases of 0 query rate.
         query_rate_resnet = self.resnet.get_query_rate()
         query_rate_imagenet = self.imagenet.get_query_rate()
-        # Implicit assumption that query rate is much more significant 
+        # Implicit assumption that query rate is much more significant
         # than 0.001
         query_rate_resnet += 0.001 # Prevent 0 division errors
         query_rate_imagenet += 0.001 # Prevent 0 division errors
@@ -243,18 +244,18 @@ class ModelCollection:
         # Pick a random float from 0 to 1.
         rand_sample = random.uniform(0, 1)
         # If float is smaller than self.pick_resnet_prob, choose resnet.
-        # Otherwise, choose lenet 
+        # Otherwise, choose lenet
         if rand_sample < self.pick_resnet_prob:
             chosen_model = self.resnet
         else:
             chosen_model = self.imagenet
-        
+
         chosen_model.infer_once()
         if chosen_model.check_batch_successful():
             # Create thread to write to SDFS
-            # Enqueue 
-            # Even though infer once and enqueue images access the lock twice 
-            # (non-atomic), enqueue images will check if the queue is filled 
+            # Enqueue
+            # Even though infer once and enqueue images access the lock twice
+            # (non-atomic), enqueue images will check if the queue is filled
             # up if there was a batch enqueue, so there will not be lost data.
             chosen_model.enqueue_images()
 
