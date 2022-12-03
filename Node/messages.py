@@ -148,8 +148,10 @@ class FileMessage(Message):
         # pack the filename into a 32 byte string using struct.pack
         file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
 
+        print("version", self.version)
         # pack the version into a 4 byte int using struct.pack
-        version = struct.pack(">I", self.version)
+
+        version = struct.pack(">i", self.version)
 
         # finally, append all the bytes together
         return base_message + file_name + version + self.data
@@ -354,6 +356,9 @@ class LSMessage(Message):
     def serialize(self):
         base_message = super().serialize()
         # serialize the files
+        # print(self.files)
+        # for file in self.files:
+        #     print(file.file_name)
         ls_files = b",".join(file.ls_serialize() for file in self.files)
         return base_message + ls_files
 
