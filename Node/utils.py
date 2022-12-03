@@ -3,7 +3,7 @@ import socket
 import struct
 import textwrap
 import time
-from typing import Optional, Tuple, Union
+from typing import Optional, Tuple, Union, List
 from Node.messages import (
     Message,
     FileMessage,
@@ -107,7 +107,7 @@ def get_any_open_port() -> int:
     return port
 
 
-def _get_command_option() -> int:
+def _get_command_option() -> Tuple[int, List[str]]:
     commands = """Input a command:
     1 -> list_mem: list the membership list
     2 -> list_self: list self's id
@@ -120,29 +120,49 @@ def _get_command_option() -> int:
     # unindent the commands using textwrap
     commands = textwrap.dedent(commands)
 
-    command = input(commands)
-    try:
-        command = int(command)
-    except ValueError:
-        command = -1
+    command = input(commands).split()
 
-    return command
+    try:
+        command_num = int(command[0])
+
+    except ValueError:
+        command_num = -1
+    except IndexError:
+        command_num = -1
+
+    if len(command) > 1:
+        command_args = command[1:]
+    else:
+        command_args = []
+
+    return command_num, command_args
 
 
 def _handle_command(node, command):
-    if command == 1:
+    # the first number in the command is the command number
+    if len(command) == 0:
+        print("Invalid command")
+        return
+    command_num = command[0]
+    if command_num == 1:
         membership_list = node.get_membership_list()
         print(bcolors.OKBLUE + str(membership_list) + bcolors.ENDC)
-    elif command == 2:
+    elif command_num == 2:
         print(bcolors.OKBLUE + "NODE ID: " + str(node.get_self_id()) + bcolors.ENDC)
-    elif command == 3:
+    elif command_num == 3:
         node.join_network()
-    elif command == 4:
+    elif command_num == 4:
         node.leave_network()
-    elif command == 5:
+    elif command_num == 5:
         node.send_ls()
-    elif command == 6:
-        raise NotImplementedError
+    elif command_num == 6:
+        # command is the array, so the file name is the second element
+        # command[1] is a list of commands, so we want the first element
+        if len(command) < 2 or len(command[1]) == 0 or command[1][0] == "":
+            print("Missing file name")
+            return
+        node.send_ls(command[1])
+
     elif command == 7:
         file_store = node.get_file_store()
         filenames = file_store.get_file_names()
@@ -154,8 +174,8 @@ def _handle_command(node, command):
 
 def run_node_command_menu(node):
     while True:
-        command = _get_command_option()
-        _handle_command(node, command)
+        command_opts = _get_command_option()
+        _handle_command(node, command_opts)
 
 
 def timed_out(timestamp, timeout):

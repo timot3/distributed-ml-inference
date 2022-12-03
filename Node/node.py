@@ -390,17 +390,35 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def send_ls(self, display_res=True) -> Dict[Member, Any]:
+    def send_ls(self, file_names: List[str] = [], display_res=True) -> Dict[Member, Any]:
         """
         Send a LS message to all neighbors
+        :param file_names: The file names to search for
+        :param display_res: Whether or not to display the results
         :return: None
         """
+        files_to_search = []
+        if len(file_names) > 0:
+            # convert the str filename into a file object with no content
+            for file_name in file_names:
+                files_to_search.append(File(file_name, b""))
+
         ls_message = LSMessage(
-            MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
+            MessageType.LS,
+            self.member.ip,
+            self.member.port,
+            self.member.timestamp,
+            files_to_search,
         )
+
         res = self.broadcast_to(ls_message, self.membership_list, recv=True)
         if display_res:
             for member, message in res.items():
+                if message is None:
+                    continue
+                if message.message_type == MessageType.FILE_ERROR:
+                    self.logger.debug(f"Error: {file_names} not found on {member}")
+                    continue
                 files_str = ", ".join(str(file) for file in message.files)
                 print(f"{member}: {files_str}")
 

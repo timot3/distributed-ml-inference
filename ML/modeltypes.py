@@ -1,3 +1,4 @@
+import asyncio
 import random
 import time
 from enum import IntEnum
@@ -36,9 +37,31 @@ QUEUE_CAPACITY = 64  # Arbitrary
 class MLModel:
     def __init__(self):
         self.model = None
+        self.batch_size = 1
         # Hyperparameter to be set.
         # Utility comes from using this after coordinator failure
         self.batch_size = 1
+
+        # We let the queue be a queue of lists of images.
+        # We do not want insertion to block, so we manually track queue depth rather
+        # than instantiating it with one.
+        self.batch_queue = Queue()
+        # This accomodates having batch size be != 1, and have the design
+        # infer 1 picture at once - less efficient than inferring entire
+        # batch but much better load balance
+        self.image_fname_queue = Queue()
+        # Only useful for defensive programming
+        # Restrict this variable to inside infer_batch only if not
+        # coding asserts
+        self.cur_batch_size = self.batch_size
+        self.predictions_lock = Lock()
+        self.output_predictions = []
+        self.queries = 0 # Includes those not committed into FS
+        self.complete_queries = 0
+        self.complete_queries_prev = 0
+        self.complete_queries_in_interval = 0
+        self.complete_queries_lock = Lock()
+        self.query_interval = 0.1
 
     """
     Remove this, the dataset should be filled in via SDFS.
