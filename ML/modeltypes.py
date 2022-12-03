@@ -19,7 +19,7 @@ class ToDoException(Exception):
 
 
 class DatasetType(IntEnum):
-    CIFAR100 = 0
+    CIFAR10 = 0
     OXFORD_PETS = 1
 
 
