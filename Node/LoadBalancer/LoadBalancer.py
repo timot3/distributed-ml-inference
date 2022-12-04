@@ -17,12 +17,6 @@ class LoadBalancer:
         self.node = node
         self.node.load_balancer = self
 
-    def get_best_node(self, query) -> "Member":
-        """Returns the best node for the query"""
-        # get the node with the least amount of active queries
-        # if there is a tie, choose the node with the least amount of total queries
-        pass
-
     def get_best_model(self) -> ModelType:
         """Get the least loaded (by time of inference) model.
         We want model inference times to be within 20% of each other.
