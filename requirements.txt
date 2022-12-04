@@ -1,4 +1,5 @@
 numpy
 fastai
 opencv-python
+pytest
 Pillow
