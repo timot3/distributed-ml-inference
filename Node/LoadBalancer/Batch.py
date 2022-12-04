@@ -62,9 +62,9 @@ class Batch:
 
 
 class BatchResult:
-    def __init__(self, job: Batch, result: "Message"):
-        self.job = job
-        self.id = job.id
-        self.files = job.files
-        self.result = job.result
-        self.time_to_complete = job.get_completion_time()
+    def __init__(self, batch: Batch, result: "Message"):
+        self.job = batch
+        self.id = batch.id
+        self.files = batch.files
+        self.result = result
+        self.time_to_complete = batch.get_completion_time()
