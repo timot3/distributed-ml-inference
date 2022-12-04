@@ -10,6 +10,8 @@ from PIL import Image
 from queue import Queue
 from threading import Lock, Thread
 
+from fastai.vision.all import *
+
 from ML.utils import load_learner
 from Node.messages import (
     Message,
@@ -179,9 +181,9 @@ class ModelCollection:
         with self.batch_lock:
             assert self.current_batch is not None
             self.model = self.select_model(self.current_model_type)
-            pred = self.model.predict(self.current_batch)
-            # TODO: Store into SDFS
-            # Create a message of the prediction and send it back.
+            pred = []
+            for img in self.current_batch:
+                pred.append(self.model.predict(img))
             self.successful_batch(pred)
 
     def insert_batch(self, model_type, batch_id, file_list):
@@ -200,8 +202,9 @@ class ModelCollection:
             introducer_member = self.server.membership_list[0]
             # Currently, read or send get to coordinator
             # TODO: Account for failure
-            img = self.server.broadcast_to(msg, [introducer_member], recv=True)
-            file_list.append(img)
+            received_data = self.server.broadcast_to(msg, [introducer_member], recv=True)
+            img_fastai = PILImage.create(received_data[introducer_member].data)
+            file_list.append(img_fastai)
 
         with self.batch_lock:
             self.current_image_list = image_list
