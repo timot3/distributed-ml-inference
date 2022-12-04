@@ -12,6 +12,7 @@ from typing import Any, List, Optional, Tuple, Dict
 import random
 
 from FileStore.FileStore import File, FileStore
+from ML.modeltypes import ClassifierModel, DummyModel, ModelCollection
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -21,6 +22,8 @@ from Node.messages import (
     MessageType,
     FileMessage,
 )
+from .LoadBalancer.LoadBalancer import LoadBalancer
+from .LoadBalancer.Scheduler import Scheduler
 from .nodetypes import (
     MembershipList,
     Member,
@@ -86,6 +89,15 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
+
+        # init the load balancer, if necessart
+        if self.is_introducer:
+            self.scheduler = Scheduler(self)
+            self.load_balancer = LoadBalancer(self)
+
+        # init the models
+        self.model_collection = ModelCollection(self)
+
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -340,9 +352,14 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :param recv: Whether or not to receive a response from the members
         :return: a dict of neighbors and whether the message was sent successfully
         """
+
         member_to_response = {}
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        if len(members) == 0:
+            # no members?
+            return member_to_response
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(members)) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
@@ -377,17 +394,35 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         if not self.membership_list.update_heartbeat(member, member.timestamp):
             self.membership_list.append(member)
 
-    def send_ls(self, display_res=True) -> Dict[Member, Any]:
+    def send_ls(self, file_names: List[str] = [], display_res=True) -> Dict[Member, Any]:
         """
         Send a LS message to all neighbors
+        :param file_names: The file names to search for
+        :param display_res: Whether or not to display the results
         :return: None
         """
+        files_to_search = []
+        if len(file_names) > 0:
+            # convert the str filename into a file object with no content
+            for file_name in file_names:
+                files_to_search.append(File(file_name, b""))
+
         ls_message = LSMessage(
-            MessageType.LS, self.member.ip, self.member.port, self.member.timestamp, []
+            MessageType.LS,
+            self.member.ip,
+            self.member.port,
+            self.member.timestamp,
+            files_to_search,
         )
+
         res = self.broadcast_to(ls_message, self.membership_list, recv=True)
         if display_res:
             for member, message in res.items():
+                if message is None:
+                    continue
+                if message.message_type == MessageType.FILE_ERROR:
+                    self.logger.debug(f"Error: {file_names} not found on {member}")
+                    continue
                 files_str = ", ".join(str(file) for file in message.files)
                 print(f"{member}: {files_str}")
 
@@ -437,7 +472,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             nodes_with_file = adjusted_membership_list.find_machines_with_file(
                 file_name, file_version=file_version
             )
-            machines_without_file = adjusted_membership_list.find_machines_without_file(
+            machines_without_file = adjusted_membership_list.find_members_without_file(
                 file_name, file_version=file_version
             )
             if len(machines_without_file) == 0 or len(nodes_with_file) == 0:

@@ -228,7 +228,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # delete the file locally
             self.server.file_store.delete_file(message.file_name)
 
-    def _process_ls(self, message: FileMessage) -> None:
+    def _process_ls(self, message: LSMessage) -> None:
         """
         Process a LS message and send the list of files
         :param message: The received message
@@ -236,13 +236,35 @@ class NodeHandler(socketserver.BaseRequestHandler):
         """
         # reply with everything in the filestore
         files = self.server.file_store.get_latest_versions()
+        file_names_stored = [file.file_name for file in files]
+        file_names_requested = [str(file.file_name) for file in message.files]
+
+        files_to_send = []
+
+        # parse the files requested in the LSmessage. If no files are requested, send all files
+        if len(file_names_requested) > 0:
+            for requested_file in file_names_requested:
+                if requested_file in file_names_stored:
+                    # get the file from the filestore
+                    file = self.server.file_store.get_file(requested_file)
+                    files_to_send.append(file)
+
+            if len(files_to_send) == 0:
+                self.server.logger.info("No files found")
+                # send a file_error message
+                _send_file_err(
+                    self.request, self.server.member, message.files[0].file_name
+                )
+                return
+        else:
+            files_to_send = files
 
         file_list_message = LSMessage(
             MessageType.LS,
             self.server.host,
             self.server.port,
             self.server.timestamp,
-            files,
+            files_to_send,
         )
 
         self.server.logger.info(f"Replying with {file_list_message}")
@@ -527,6 +549,37 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         elif message.message_type == MessageType.FILE_REPLICATION_REQUEST:
             self._process_file_replication_request(message)
+
+        elif message.message_type == MessageType.SET_BATCH_SIZE:
+            model = self.server.model_collection.select_model(message.model_type)
+            model.set_batch_size(message.batch_size)
+
+        elif message.message_type == MessageType.SCHEDULE_BATCH:
+            self.server.model_collection.insert_batch(
+                message.model_type, message.batch_id, message.file_list
+            )
+            raise NotImplementedError
+
+        elif message.message_type == MessageType.QUERY_COMPLETE:
+            raise NotImplementedError
+            # This is received by the coordinator
+            # Increment query counter by 1.
+            # Done
+            # Perhaps just use BATCH_COMPLETE?
+
+        elif message.message_type == MessageType.BATCH_COMPLETE:
+            raise NotImplementedError
+            # This is received by the coordinator
+            # Mark the batch as completed, other bookkeeping.
+
+        elif message.message_type == MessageType.INVALIDATE_BATCH:
+            raise NotImplementedError
+
+        elif message.message_type == MessageType.INVALIDATE_ALL_IN_NODE:
+            raise NotImplementedError
+            # Clear everything. If we do not have a queue, remove all
+            # code related to this.
+            # Right now, all in node == 1 batch, so this is entirely unnecessary
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))

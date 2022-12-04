@@ -2,6 +2,7 @@ import argparse
 import os
 import threading
 import socket
+import time
 
 from Node.node import NodeTCPServer
 from Node.nodetypes import VM1_URL
@@ -37,7 +38,8 @@ if __name__ == "__main__":
 
         INTRODUCER_HOST, INTRODUCER_PORT = socket.gethostbyname(VM1_URL), 8080
 
-    # create a udp server that resuses the address
+    # wait for the introducer to start
+    time.sleep(1)
 
     with NodeTCPServer(HOST, PORT, is_introducer=False) as node:
         node.allow_reuse_address = True
