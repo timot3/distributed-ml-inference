@@ -1,6 +1,9 @@
 """Load balancer for the ML queries"""
 from typing import TYPE_CHECKING
 
+from Node.LoadBalancer.Scheduler import Scheduler
+from Node.LoadBalancer.Job import Job
+
 if TYPE_CHECKING:
     from Node.node import NodeTCPServer
     from Node.nodetypes import Member, MembershipList
@@ -12,6 +15,7 @@ class LoadBalancer:
     def __init__(self, node: "NodeTCPServer"):
         self.node = node
         self.node.load_balancer = self
+        self.scheduler = Scheduler(node)
 
     def get_best_node(self, query) -> "Member":
         """Returns the best node for the query"""

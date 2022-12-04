@@ -355,7 +355,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         """
         member_to_response = {}
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(members)) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
