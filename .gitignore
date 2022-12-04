@@ -17,6 +17,7 @@ testfiles/*.en.tgz
 
 # ML models
 ML/models/*.pkl
+ML/config.json
 
 # ML data
 ML/datasets/oxford_pets/*.jpg

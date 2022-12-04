@@ -2,7 +2,7 @@ import random
 import time
 from enum import IntEnum
 import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, TYPE_CHECKING
 import json
 import requests
 import numpy as np
@@ -11,14 +11,18 @@ from queue import Queue
 from threading import Lock, Thread
 
 from fastai.vision.all import *
+class ModelType(IntEnum):
+    RESNET = 0
+    IMAGENET = 1
+    UNSPECIFIED = 2
 
+from ML.messages import get_file_get_msg
 from ML.utils import load_learner
-from Node.messages import (
-    Message,
-    MessageType,
-    FileMessage,
-)
-from Node.node import NodeTCPServer
+
+
+if TYPE_CHECKING:
+    from Node.node import NodeTCPServer
+
 
 
 class ToDoException(Exception):
@@ -27,10 +31,7 @@ class ToDoException(Exception):
     pass
 
 
-class ModelType(IntEnum):
-    RESNET = 0
-    IMAGENET = 1
-    UNSPECIFIED = 2
+
 
 
 QUEUE_CAPACITY = 64  # Arbitrary
@@ -92,7 +93,10 @@ class ClassifierModel(MLModel):
         self.model = load_learner(model_pkl_path)
 
     def train(self):
-        self._load()
+        if self.model_type == ModelType.RESNET:
+            self._load("ML/models/resnet.pkl")
+        else:
+            self._load("ML/models/alexnet.pkl")
 
 
 class DummyModel(MLModel):
@@ -107,10 +111,13 @@ class DummyModel(MLModel):
 
 
 class ModelCollection:
-    def __init__(self, server: NodeTCPServer) -> None:
+    def __init__(self, server: "NodeTCPServer") -> None:
         self.server = server
         self.resnet = ClassifierModel(ModelType.RESNET)
         self.imagenet = ClassifierModel(ModelType.IMAGENET)
+        self.resnet.train()
+        self.imagenet.train()
+
         self.workDistThread = Thread()
         self.batch_lock = Lock()
         self.current_batch_id = None
@@ -190,15 +197,7 @@ class ModelCollection:
         image_list = []
         for f in file_list:
             # Load from SDFS
-            msg = FileMessage(
-                MessageType.GET,
-                self.server.host,
-                self.server.port,
-                self.server.timestamp,
-                f,
-                0,
-                b"",
-            )
+            msg = get_file_get_msg(self.server, f)
             introducer_member = self.server.membership_list[0]
             # Currently, read or send get to coordinator
             # TODO: Account for failure
@@ -221,12 +220,7 @@ class ModelCollection:
         # Also inform dispatcher the file name written into SDFS
         # using the same message
         # TODO: Change the Message to one with the filename
-        msg = Message(
-            MessageType.BATCH_COMPLETE,
-            self.server.host,
-            self.server.port,
-            self.server.timestamp,
-        )
+        msg = get_batch_complete_msg(self.server)
         # TODO: Inform scheduler
         introducer_member = self.server.membership_list[0]
         self.server.broadcast_to(msg, [introducer_member], recv=True)

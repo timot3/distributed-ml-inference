@@ -1,6 +1,6 @@
 from typing import Union
 from ML.modeltypes import ModelType
-from Node.messages import MessageType, Message
+from Node.messages import MessageType, Message, FileMessage
 from PIL import Image
 
 from io import BytesIO
@@ -107,7 +107,7 @@ class MLBatchSizeMessage(Message):
         )
 
     @classmethod
-    def deserialize(cls, data: Union[bytes, bytearray]) -> "MLMessage":
+    def deserialize(cls, data: Union[bytes, bytearray]) -> "MLBatchSizeMessage":
         try:
             (
                 message_type,
@@ -131,3 +131,25 @@ class MLBatchSizeMessage(Message):
                 f"Error deserializing MLMessage: {len(data)} received, with data: {data}"
             )
             raise struct.error("Error deserializing MLMessage")
+
+
+def get_batch_complete_msg(server):
+    msg = Message(
+        MessageType.BATCH_COMPLETE,
+        server.host,
+        server.port,
+        server.timestamp,
+    )
+    return msg
+
+def get_file_get_msg(server, file_name):
+    msg = FileMessage(
+        MessageType.GET,
+        server.host,
+        server.port,
+        server.timestamp,
+        file_name,
+        0,
+        b"",
+    )
+    return msg
