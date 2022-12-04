@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from ML.messages import MLMessage
 
     from ML.modeltypes import ModelType
-    from Node.messages import MessageType
+    from Node.messages import MessageType, Message
 
 
 def get_job_id_hash(files: List[str]) -> int:
@@ -55,12 +55,14 @@ class Batch:
         ip = self.node_scheduled_on.ip
         port = self.node_scheduled_on.port
         timestamp = self.node_scheduled_on.timestamp
-        msg = MLMessage(MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model_type, 0, 1)
+        msg = MLMessage(
+            MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model_type, 0, 1
+        )
         return msg
 
 
 class BatchResult:
-    def __init__(self, job: Batch):
+    def __init__(self, job: Batch, result: "Message"):
         self.job = job
         self.id = job.id
         self.files = job.files

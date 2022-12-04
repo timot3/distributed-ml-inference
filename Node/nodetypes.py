@@ -323,8 +323,24 @@ class MembershipList(list):
     def get_least_loaded_member(self):
         least_loaded_member = None
         least_load = float("inf")
-        for member in self:
+        for member in self:  # type: Member
             load = member.get_total_load()
+            if load < least_load:
+                least_loaded_member = member
+                least_load = load
+        return least_loaded_member
+
+    def get_model_load(self, model_type: ModelType):
+        load = 0
+        for member in self:  # type: Member
+            load += member.get_load(model_type)
+        return load
+
+    def get_least_loaded_node_for_model(self, model_type) -> Member:
+        least_loaded_member = None
+        least_load = float("inf")
+        for member in self:  # type: Member
+            load = member.get_load(model_type)
             if load < least_load:
                 least_loaded_member = member
                 least_load = load

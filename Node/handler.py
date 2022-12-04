@@ -239,9 +239,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
         file_names_stored = [file.file_name for file in files]
         file_names_requested = [str(file.file_name) for file in message.files]
 
-        print("file_names", file_names_stored)
-        print("Files requested", file_names_requested)
-
         files_to_send = []
 
         # parse the files requested in the LSmessage. If no files are requested, send all files

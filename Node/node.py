@@ -48,11 +48,11 @@ from .utils import (
 # and connects to the introducer server via a tcp socket
 class NodeTCPServer(socketserver.ThreadingTCPServer):
     def __init__(
-            self,
-            host,
-            port,
-            is_introducer=False,
-            slow_mode=False,
+        self,
+        host,
+        port,
+        is_introducer=False,
+        slow_mode=False,
     ):
         # call the super class constructor
         super().__init__((host, port), NodeHandler, bind_and_activate=False)
@@ -341,7 +341,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             return None
 
     def broadcast_to(
-            self, message: Message, members: List[Member], recv=False
+        self, message: Message, members: List[Member], recv=False
     ) -> Dict[Member, Any]:
         """
         Broadcast a message to all `members`

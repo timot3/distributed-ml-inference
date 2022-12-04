@@ -48,5 +48,3 @@ class NodeElectInfo:
         with self._pending_ack_nodes_lock:
             self._pending_ack_nodes.remove(nodeid)
             return len(self._pending_ack_nodes) == 0
-
-    pass
