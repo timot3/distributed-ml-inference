@@ -1,4 +1,3 @@
-import asyncio
 import random
 import time
 from enum import IntEnum
@@ -25,7 +24,8 @@ class ModelType(IntEnum):
     IMAGENET = 1
 
 
-QUEUE_CAPACITY = 64 # Arbitrary
+QUEUE_CAPACITY = 64  # Arbitrary
+
 
 class MLModel:
     def __init__(self):
@@ -46,7 +46,7 @@ class MLModel:
         self.cur_batch_size = self.batch_size
         self.predictions_lock = Lock()
         self.output_predictions = []
-        self.queries = 0 # Includes those not committed into FS
+        self.queries = 0  # Includes those not committed into FS
         self.complete_queries = 0
         self.complete_queries_prev = 0
         self.complete_queries_in_interval = 0
@@ -124,8 +124,6 @@ class MLModel:
         with self.complete_queries_lock:
             self.complete_queries += len(self.output_predictions)
 
-
-
     def infer_once(self):
         # Empty queue, wait for it to fill up
         if self.image_fname_queue.empty():
@@ -137,8 +135,6 @@ class MLModel:
 
         self.queries += 1
 
-
-
     # Image should be a single image, we do NOT want batch prediction
     # Easier to load balance
     def infer_single_image(self, img_fname):
@@ -148,13 +144,14 @@ class MLModel:
             self.output_predictions.append(self.model.predict(image))
         return
 
-
     def set_batch_size(self, val: int):
         self.batch_size = val
 
     def update_query_counts(self):
         with self.complete_queries_lock:
-            self.complete_queries_in_interval = self.complete_queries - self.complete_queries_prev
+            self.complete_queries_in_interval = (
+                self.complete_queries - self.complete_queries_prev
+            )
             self.complete_queries_prev = self.complete_queries
         time.sleep(self.query_interval)
 
@@ -162,8 +159,6 @@ class MLModel:
         with self.complete_queries_lock:
             q = self.complete_queries_in_interval
         return q / self.query_interval
-
-
 
 
 class ClassifierModel(MLModel):
@@ -230,9 +225,11 @@ class ModelCollection:
         query_rate_imagenet = self.imagenet.get_query_rate()
         # Implicit assumption that query rate is much more significant
         # than 0.001
-        query_rate_resnet += 0.001 # Prevent 0 division errors
-        query_rate_imagenet += 0.001 # Prevent 0 division errors
-        k_denom = (1 - self.pick_resnet_prob) * query_rate_resnet + query_rate_imagenet * self.pick_resnet_prob
+        query_rate_resnet += 0.001  # Prevent 0 division errors
+        query_rate_imagenet += 0.001  # Prevent 0 division errors
+        k_denom = (
+            1 - self.pick_resnet_prob
+        ) * query_rate_resnet + query_rate_imagenet * self.pick_resnet_prob
         k_numerator = query_rate_resnet
         k = k_numerator / k_denom
         # Prevent oscillation, reduce weightage of scaling factor k
@@ -258,4 +255,3 @@ class ModelCollection:
             # (non-atomic), enqueue images will check if the queue is filled
             # up if there was a batch enqueue, so there will not be lost data.
             chosen_model.enqueue_images()
-
