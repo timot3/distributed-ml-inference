@@ -4,6 +4,8 @@ import struct
 import textwrap
 import time
 from typing import Optional, Tuple, Union, List
+
+from ML.messages import MLBatchScheduleMessage, MLBatchSizeMessage, MLBatchResultMessage
 from Node.messages import (
     Message,
     FileMessage,
@@ -255,13 +257,28 @@ def is_fileversion_message(message_type: int) -> bool:
     return message_type == MessageType.GET_VERSIONS or message_type == MessageType.GET
 
 
+# def is_ml_message(message_type: int) -> bool:
+
+
+def is_ml_schedule_batch_message(message_type: int) -> bool:
+    return message_type == MessageType.ML_SCHEDULE_BATCH
+
+
+def is_ml_batch_size_message(message_type: int) -> bool:
+    return message_type == MessageType.SET_BATCH_SIZE
+
+
+def is_ml_batch_result_message(message_type: int) -> bool:
+    return message_type == MessageType.BATCH_COMPLETE
+
+
 def get_message_from_bytes(data: Union[bytes, bytearray]) -> Message:
     """
     Factory method to get either a Message, FileStoreMessage, or ElectionMessage
     from a byte array.
 
     :param data: the bytes received
-    :return: the Message, FileStoreMessage, or ElectionMessage
+    :return: the Message
     """
 
     if len(data) == 0:
@@ -293,8 +310,17 @@ def get_message_from_bytes(data: Union[bytes, bytearray]) -> Message:
     elif is_file_replication_message(message_type):
         return FileReplicationMessage.deserialize(data)
 
+    elif is_ml_schedule_batch_message(message_type):
+        return MLBatchScheduleMessage.deserialize(data)
+
+    elif is_ml_batch_size_message(message_type):
+        return MLBatchSizeMessage.deserialize(data)
+
+    elif is_ml_batch_result_message(message_type):
+        return MLBatchResultMessage.deserialize(data)
+
     else:
-        raise ValueError("Invalid message type")
+        raise ValueError(f"Invalid message type {message_type}")
 
 
 # Useful for displaying/debugging purposes, not used for functionality
