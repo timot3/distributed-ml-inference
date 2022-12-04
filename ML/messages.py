@@ -7,10 +7,6 @@ from io import BytesIO
 
 import struct
 
-#     QUERY_MODEL = 22  # sent to leader to query a model, and forwarded to the node
-#     QUERY_MODEL_RESULT = 23  # sent from node to leader with the result of the query, and forwarded to the client
-
-
 """ML messages have the following fields:
 == inherited from Message ==
 1 byte for message type
@@ -77,6 +73,57 @@ class MLMessage(Message):
                 ModelType(model_type),
                 int(batch_id),
                 file_list,
+            )
+        except struct.error:
+            # print the length of the data and the data received
+            print(
+                f"Error deserializing MLMessage: {len(data)} received, with data: {data}"
+            )
+            raise struct.error("Error deserializing MLMessage")
+
+
+class MLBatchSizeMessage(Message):
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        model_type: ModelType,
+        batch_size: int,
+    ):
+        super().__init__(message_type, ip, port, timestamp)
+        self.model_type = model_type
+        self.batch_size = batch_size
+
+    def __str__(self):
+        return f"{super().__str__()} dataset_type={self.dataset_type} model_type={self.model_type}"
+
+    def serialize(self) -> bytes:
+        return (
+            super().serialize()
+            + self.model_type.to_bytes(1, "big")
+            + self.batch_size.to_bytes(1, "big")
+        )
+
+    @classmethod
+    def deserialize(cls, data: Union[bytes, bytearray]) -> "MLMessage":
+        try:
+            (
+                message_type,
+                ip,
+                port,
+                timestamp,
+                model_type,
+                batch_size,
+            ) = ml_struct.unpack_from(data)
+            return cls(
+                MessageType(message_type),
+                ip.decode("utf-8"),
+                port,
+                timestamp,
+                ModelType(model_type),
+                int(batch_size),
             )
         except struct.error:
             # print the length of the data and the data received

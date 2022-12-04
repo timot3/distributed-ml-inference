@@ -528,6 +528,37 @@ class NodeHandler(socketserver.BaseRequestHandler):
         elif message.message_type == MessageType.FILE_REPLICATION_REQUEST:
             self._process_file_replication_request(message)
 
+        elif message.message_type == MessageType.SET_BATCH_SIZE:
+            model = self.server.model_collection.select_model(message.model_type)
+            model.set_batch_size(message.batch_size)
+
+        elif message.message_type == MessageType.SCHEDULE_BATCH:
+            self.server.model_collection.insert_batch(
+                message.model_type, message.batch_id, message.file_list
+            )
+            raise NotImplementedError
+
+        elif message.message_type == MessageType.QUERY_COMPLETE:
+            raise NotImplementedError
+            # This is received by the coordinator
+            # Increment query counter by 1.
+            # Done
+            # Perhaps just use BATCH_COMPLETE?
+
+        elif message.message_type == MessageType.BATCH_COMPLETE:
+            raise NotImplementedError
+            # This is received by the coordinator
+            # Mark the batch as completed, other bookkeeping.
+
+        elif message.message_type == MessageType.INVALIDATE_BATCH:
+            raise NotImplementedError
+
+        elif message.message_type == MessageType.INVALIDATE_ALL_IN_NODE:
+            raise NotImplementedError
+            # Clear everything. If we do not have a queue, remove all
+            # code related to this.
+            # Right now, all in node == 1 batch, so this is entirely unnecessary
+
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))
 

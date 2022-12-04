@@ -6,6 +6,7 @@ import threading
 import time
 import traceback
 from typing import Any, List, Optional, Tuple, Dict
+from ML.modeltypes import ModelCollection
 
 # from nodeelectinfo import NodeElectInfo
 
@@ -86,6 +87,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
+
+        self.model_collection = ModelCollection(self)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
