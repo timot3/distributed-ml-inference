@@ -13,7 +13,7 @@ from threading import Lock, Thread
 from fastai.vision.all import *
 class ModelType(IntEnum):
     RESNET = 0
-    IMAGENET = 1
+    ALEXNET = 1
     UNSPECIFIED = 2
 
 from ML.messages import get_file_get_msg
@@ -85,7 +85,7 @@ class ClassifierModel(MLModel):
                 if self.model_type == ModelType.RESNET:
                     model_url = config["ResNet"]["model_url"]
                 else:
-                    model_url = config["ImageNet"]["model_url"]
+                    model_url = config["AlexNet"]["model_url"]
             model_pkl_file = requests.get(model_url).content
             with open(model_pkl_path, "wb") as pkl_file:
                 pkl_file.write(model_pkl_file)
@@ -114,9 +114,12 @@ class ModelCollection:
     def __init__(self, server: "NodeTCPServer") -> None:
         self.server = server
         self.resnet = ClassifierModel(ModelType.RESNET)
-        self.imagenet = ClassifierModel(ModelType.IMAGENET)
+        self.alexnet = ClassifierModel(ModelType.ALEXNET)
+        self.server.logger.info("Loading models...")
         self.resnet.train()
-        self.imagenet.train()
+        self.server.logger.info("ResNet loaded")
+        self.alexnet.train()
+        self.server.logger.info("ImageNet loaded")
 
         self.workDistThread = Thread()
         self.batch_lock = Lock()
@@ -143,7 +146,7 @@ class ModelCollection:
         # Assumption of steady state implies the model should generally not
         # deal with cases of 0 query rate.
         query_rate_resnet = self.resnet.get_query_rate()
-        query_rate_imagenet = self.imagenet.get_query_rate()
+        query_rate_imagenet = self.alexnet.get_query_rate()
         # Implicit assumption that query rate is much more significant
         # than 0.001
         query_rate_resnet += 0.001  # Prevent 0 division errors
@@ -166,7 +169,7 @@ class ModelCollection:
         if rand_sample < self.pick_resnet_prob:
             chosen_model = self.resnet
         else:
-            chosen_model = self.imagenet
+            chosen_model = self.alexnet
 
         chosen_model.infer_once()
         if chosen_model.check_batch_successful():
@@ -182,7 +185,7 @@ class ModelCollection:
         if model == ModelType.RESNET:
             return self.resnet
         else:
-            return self.imagenet
+            return self.alexnet
 
     def infer(self):
         with self.batch_lock:

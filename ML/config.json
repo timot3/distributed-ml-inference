@@ -3,7 +3,7 @@
         "model_url": "https://uofi.box.com/s/ri3dd1ej72nvrv54hqk2u0kqtd2jkwsj",
         "model_dataset": "https://uofi.box.com/s/"
     },
-    "ImageNet" : {
+    "AlexNet" : {
         "model_url": "https://uofi.box.com/s/n02vycystzo9y73l1mxa0249f8bq8ajd",
         "model_dataset": "https://uofi.box.com/s/"
     }
