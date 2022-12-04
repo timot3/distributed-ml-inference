@@ -35,12 +35,14 @@ class MessageType(IntEnum):
     NEW_NODE = 18
     MEMBERSHIP_LIST = 19
 
-    # Machine learning messages
-    REGISTER_MODEL = 20  # sent to nodes to init a new model
-    REGISTER_MODEL_ACK = 21  # sent to leader when model has been "trained" (initialized)
+    QUERY_MODEL = 22  # Client to coordinator to query a model
+    SET_BATCH_SIZE = 23  # Client to all nodes
 
-    QUERY_MODEL = 22  # sent to leader to query a model, and forwarded to the node
-    QUERY_MODEL_RESULT = 23  # sent from node to leader with the result of the query, and forwarded to the client
+    SCHEDULE_BATCH = 24  # Coordinator to node
+    QUERY_COMPLETE = 25  # Node to coordinator, only use to measure rate
+    BATCH_COMPLETE = 26  # Node to coordinator
+    INVALIDATE_BATCH = 27  # Coordinator to node
+    INVALIDATE_ALL_IN_NODE = 28  # Coordinator to node
 
 
 # join message has the following fields:
