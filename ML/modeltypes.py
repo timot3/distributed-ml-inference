@@ -19,19 +19,17 @@ class ToDoException(Exception):
     pass
 
 
-class DatasetType(IntEnum):
-    CIFAR10 = 0
-    OXFORD_PETS = 1
+class ModelType(IntEnum):
+    RESNET = 0
+    IMAGENET = 1
 
 
 QUEUE_CAPACITY = 64 # Arbitrary
 
 class MLModel:
-    def __init__(self, model_dataset: DatasetType):
-        self.model_dataset = model_dataset
+    def __init__(self):
         self.model = None
         self.batch_size = 1 
-        # self._download_dataset()
 
         # We let the queue be a queue of lists of images.
         # We do not want insertion to block, so we manually track queue depth rather 
@@ -49,6 +47,10 @@ class MLModel:
         self.output_predictions = []
         self.queries = 0 # Includes those not committed into FS
         self.complete_queries = 0
+        self.complete_queries_prev = 0
+        self.complete_queries_in_interval = 0
+        self.complete_queries_lock = Lock()
+        self.query_interval = 0.1
 
     """
     Remove this, the dataset should be filled in via SDFS.
@@ -118,7 +120,8 @@ class MLModel:
         # TODO: Inform dispatcher
 
         # TODO: Account for coordinator failures/change of leader etc. This should be done in a future phase, not now.
-        self.complete_queries += len(self.output_predictions)
+        with self.complete_queries_lock:
+            self.complete_queries += len(self.output_predictions)
 
 
 
@@ -148,11 +151,24 @@ class MLModel:
     def set_batch_size(self, val: int):
         self.batch_size = val
 
+    def update_query_counts(self):
+        with self.complete_queries_lock:
+            self.complete_queries_in_interval = self.complete_queries - self.complete_queries_prev
+            self.complete_queries_prev = self.complete_queries
+        time.sleep(self.query_interval)
+
+    def get_query_rate(self):
+        with self.complete_queries_lock:
+            q = self.complete_queries_in_interval
+        return q / self.query_interval
+
+
+
 
 class ClassifierModel(MLModel):
-    def __init__(self, model_dataset: DatasetType):
-        super().__init__(model_dataset)
-        self._download_dataset()
+    def __init__(self, model_type: ModelType):
+        super().__init__()
+        self.model_type = model_type
 
     def _load(self, model_pkl_path: str):
         # load the model from the pkl file into a fastai vision_learner
@@ -164,7 +180,10 @@ class ClassifierModel(MLModel):
             # get the url from config.json ""
             with open("ML/config.json", "rb") as config_file:
                 config = json.load(config_file)
-            model_url = config["ResNet"]["model_url"]
+                if self.model_type == ModelType.RESNET:
+                    model_url = config["ResNet"]["model_url"]
+                else: 
+                    model_url = config["ImageNet"]["model_url"]
             model_pkl_file = requests.get(model_url).content
             with open(model_pkl_path, "wb") as pkl_file:
                 pkl_file.write(model_pkl_file)
@@ -176,8 +195,8 @@ class ClassifierModel(MLModel):
 
 
 class DummyModel(MLModel):
-    def __init__(self, model_dataset: DatasetType):
-        super().__init__(model_dataset)
+    def __init__(self):
+        super().__init__()
 
     def _load(self, model_pkl_path: str):
         pass
@@ -188,8 +207,8 @@ class DummyModel(MLModel):
     
 class ModelCollection:
     def __init__(self) -> None:
-        self.resnet = ClassifierModel()
-        self.lenet = ClassifierModel()
+        self.resnet = ClassifierModel(ModelType.RESNET)
+        self.imagenet = ClassifierModel(ModelType.IMAGENET)
         self.workDistThread = Thread()
         self.probScaleThread = Thread()
         # Dynamically adjusted based on query rates
@@ -200,17 +219,20 @@ class ModelCollection:
         self.pick_resnet_prob = 0.5
     
     # To be run by ProbScaleThread
-    def update_formula(self, query_rate_resnet, query_rate_lenet):
+    def update_formula(self):
         # Scaling factor k on probability will equalize the query rate
+        # assuming rate is directly proportional to probability of issue
         # We will not immediate scale by this factor to prevent oscillations
         # Assumption of steady state implies the model should generally not 
         # deal with cases of 0 query rate.
+        query_rate_resnet = self.resnet.get_query_rate()
+        query_rate_imagenet = self.imagenet.get_query_rate()
         # Implicit assumption that query rate is much more significant 
         # than 0.001
         query_rate_resnet += 0.001 # Prevent 0 division errors
-        query_rate_lenet += 0.001 # Prevent 0 division errors
-        k_denom = (1 - self.pick_resnet_prob) * query_rate_resnet + query_rate_lenet * self.pick_resnet_prob
-        k_numerator = query_rate_lenet
+        query_rate_imagenet += 0.001 # Prevent 0 division errors
+        k_denom = (1 - self.pick_resnet_prob) * query_rate_resnet + query_rate_imagenet * self.pick_resnet_prob
+        k_numerator = query_rate_resnet
         k = k_numerator / k_denom
         # Prevent oscillation, reduce weightage of scaling factor k
         self.pick_resnet_prob *= 0.5 * k
@@ -219,12 +241,13 @@ class ModelCollection:
     def work_dist(self):
         # Assumption: High batch dispatch rate if there is empty queue.
         # Pick a random float from 0 to 1.
+        rand_sample = random.uniform(0, 1)
         # If float is smaller than self.pick_resnet_prob, choose resnet.
         # Otherwise, choose lenet 
-        if True:
+        if rand_sample < self.pick_resnet_prob:
             chosen_model = self.resnet
         else:
-            chosen_model = self.lenet
+            chosen_model = self.imagenet
         
         chosen_model.infer_once()
         if chosen_model.check_batch_successful():

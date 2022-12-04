@@ -1,5 +1,5 @@
 from typing import Union
-from ML.modeltypes import DatasetType, MLModelType
+from ML.modeltypes import ModelType
 from Node.messages import MessageType, Message
 from PIL import Image
 
@@ -38,16 +38,15 @@ class MLMessage(Message):
         ip: str,
         port: int,
         timestamp: int,
-        dataset_type: DatasetType,
-        model_type: MLModelType,
-        file_idx_start: int,  # Assumes that we sort the list of filenames
-        file_idx_end: int,
+        model_type: ModelType,
+        batch_id: int,
+        file_list: list
     ):
         super().__init__(message_type, ip, port, timestamp)
-        self.dataset_type = dataset_type
         self.model_type = model_type
-        self.file_idx_start = file_idx_start
-        self.file_idx_end = file_idx_end
+        self.batch_id = batch_id
+        self.file_list_string = ":::".join(file_list)
+
 
     def __str__(self):
         return f"{super().__str__()} dataset_type={self.dataset_type} model_type={self.model_type}"
@@ -55,10 +54,9 @@ class MLMessage(Message):
     def serialize(self) -> bytes:
         return (
             super().serialize()
-            + self.dataset_type.to_bytes(1, "big")
             + self.model_type.to_bytes(1, "big")
-            + self.file_idx_start.to_bytes(1, "big")
-            + self.file_idx_end.to_bytes(1, "big")
+            + self.batch_id.to_bytes(1, "big")
+            + self.file_list_string.to_bytes(1, "big")
         )
 
     @classmethod
@@ -71,18 +69,18 @@ class MLMessage(Message):
                 timestamp,
                 dataset_type,
                 model_type,
-                file_idx_start,
-                file_idx_end,
+                batch_id,
+                file_list_string,
             ) = ml_struct.unpack_from(data)
+            file_list = file_list_string.split(":::")
             return cls(
                 MessageType(message_type),
                 ip.decode("utf-8"),
                 port,
                 timestamp,
-                DatasetType(dataset_type),
-                MLModelType(model_type),
-                file_idx_start,
-                file_idx_end,
+                ModelType(model_type),
+                int(batch_id),
+                file_list,
             )
         except struct.error:
             # print the length of the data and the data received
@@ -91,48 +89,3 @@ class MLMessage(Message):
             )
             raise struct.error("Error deserializing MLMessage")
 
-
-class QueryModelMessage(MLMessage):
-    def __init__(
-        self,
-        ip: str,
-        port: int,
-        timestamp: int,
-        dataset_type: DatasetType,
-        model_type: MLModelType,
-        queryid: int,
-        image: Image.Image,
-    ):
-        super().__init__(
-            MessageType.QUERY_MODEL, ip, port, timestamp, dataset_type, model_type
-        )
-        self.image = image
-
-    def __str__(self):
-        return f"{super().__str__()}"
-
-    def serialize(self) -> bytes:
-        # convert the image to bytes
-        img_bytes = self.image.tobytes()
-        # get the hash of img_bytes
-        img_hash = hash(img_bytes)
-        # truncate the hash to a long (8 bytes) -- this will be the queryid
-        queryid = img_hash & 0xFFFFFFFFFFFFFFFF
-        img_len = len(img_bytes)
-
-        query_model_struct = struct.Struct(f"QQ{img_len}s")
-        query_model_bytes = query_model_struct.pack(img_hash, img_len, img_bytes)
-
-        return super().serialize() + query_model_bytes
-
-    @classmethod
-    def deserialize(cls, data: Union[bytes, bytearray]) -> "QueryModelMessage":
-        parent_msg = super().deserialize(data)
-        # get the queryid and image length
-        queryid, img_len = struct.unpack_from("!QQ", data, ml_struct.size)
-        # get the image bytes
-        img_bytes = struct.unpack_from(f"{img_len}s", data, ml_struct.size + 16)[0]
-        # convert the image bytes to an image
-
-        img = Image.open(BytesIO(img_bytes))
-        return cls(*parent_msg[1:], queryid, img)
