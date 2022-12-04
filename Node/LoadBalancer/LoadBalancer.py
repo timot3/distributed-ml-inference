@@ -29,16 +29,17 @@ class LoadBalancer:
         So, take the model that currently has the least inference time
         and return that model.
         """
+        pass
 
     async def dispatch(self, batch: Batch) -> BatchResult:
         """Dispatch a job to a node"""
 
-        if batch.model == ModelType.ALEXNET:
+        if batch.model_type == ModelType.ALEXNET:
             # schedule on least-loaded alexnet node
-            return self.dispatch_to_model(ModelType.ALEXNET, batch)
-        elif batch.model == ModelType.RESNET:
+            return await self.dispatch_to_model(ModelType.ALEXNET, batch)
+        elif batch.model_type == ModelType.RESNET:
             # schedule on least-loaded resnet node
-            return self.dispatch_to_model(ModelType.RESNET, batch)
+            return await self.dispatch_to_model(ModelType.RESNET, batch)
         else:
             # pick the less-loaded model and schedule on that
             pass

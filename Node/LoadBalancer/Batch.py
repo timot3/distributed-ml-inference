@@ -1,11 +1,12 @@
 import time
 from typing import TYPE_CHECKING, List, Optional, Union
 
-from ML.messages import MLMessage
-from Node.messages import MessageType
 
 if TYPE_CHECKING:
-    from ML.modeltypes import MLModelType
+    from ML.messages import MLMessage
+
+    from ML.modeltypes import ModelType
+    from Node.messages import MessageType
 
 
 def get_job_id_hash(files: List[str]) -> int:
@@ -14,8 +15,8 @@ def get_job_id_hash(files: List[str]) -> int:
 
 
 class Batch:
-    def __init__(self, model: MLModelType, files: List[str]):
-        self.model = model
+    def __init__(self, model: "ModelType", files: List[str]):
+        self.model_type = model
         self.files = files
         self.id = get_job_id_hash(files)
         self.result = None
@@ -48,11 +49,13 @@ class Batch:
     def is_complete(self) -> bool:
         return self.result is not None
 
-    def get_job_message(self) -> MLMessage:
+    def get_job_message(self) -> "MLMessage":
+        from ML.messages import MLMessage
+
         ip = self.node_scheduled_on.ip
         port = self.node_scheduled_on.port
         timestamp = self.node_scheduled_on.timestamp
-        msg = MLMessage(MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model, 0, 1)
+        msg = MLMessage(MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model_type, 0, 1)
         return msg
 
 

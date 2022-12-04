@@ -15,6 +15,7 @@ from threading import Lock
 
 from FileStore.FileStore import File, FileStore
 from ML.modeltypes import ModelType
+from Node.LoadBalancer.Batch import Batch
 
 lock = Lock()
 
@@ -57,21 +58,6 @@ class bcolors:
     UNDERLINE = "\033[4m"
 
 
-class ActiveBatch:
-    def __init__(self, batch_id: int):
-        self.batch_id = batch_id
-        self.start_time = int(time.time())
-        self.end_time = None
-        self.duration = None
-
-    def finish(self):
-        self.end_time = int(time.time())
-        self.duration = self.end_time - self.start_time
-
-    def __eq__(self, other):
-        return self.batch_id == other.batch_id
-
-
 class LoadRepresentation:
     """
     Load is defined as the sum of time a node has spent processing batches over the last 10 seconds.
@@ -82,7 +68,7 @@ class LoadRepresentation:
         self.model_type = model_type
         self.batches = []
 
-    def add_batch(self, batch: ActiveBatch):
+    def add_batch(self, batch: Batch):
         self.batches.append(batch)
 
     def remove_batch(self, batch):
@@ -91,7 +77,7 @@ class LoadRepresentation:
     def get_load(self):
         """
         Determine the load over the last 10 seconds. If there are any batches older than 10 seconds,
-        remove them from batches and update the load.
+        remove them from batches and update the load unless the batch is still active.
 
         Returns: the load over the last 10 seconds
         """
@@ -169,6 +155,12 @@ class Member:
 
     def get_total_load(self):
         return sum(load.get_load() for load in self.loads.values())
+
+    def add_batch(self, batch: Batch):
+        self.loads[batch.model_type].add_batch(batch)
+
+    def remove_batch(self, batch: Batch):
+        self.loads[batch.model_type].remove_batch(batch)
 
     def to_tuple(self):
         return self.ip, self.port, self.timestamp
@@ -270,7 +262,7 @@ class MembershipList(list):
                 machines.append(m)
         return machines
 
-    def find_machines_without_file(
+    def find_members_without_file(
         self, file_name: str, file_version: int = -1
     ) -> List[Member]:
         machines = []
@@ -327,3 +319,13 @@ class MembershipList(list):
             res += f"{m}: {files}\n"
 
         return res
+
+    def get_least_loaded_member(self):
+        least_loaded_member = None
+        least_load = float("inf")
+        for member in self:
+            load = member.get_total_load()
+            if load < least_load:
+                least_loaded_member = member
+                least_load = load
+        return least_loaded_member

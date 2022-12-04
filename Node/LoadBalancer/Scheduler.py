@@ -1,18 +1,18 @@
 from typing import TYPE_CHECKING, Optional
 from Node.LoadBalancer.Batch import Batch
-from Node.LoadBalancer.LoadBalancer import LoadBalancer
+from Node.nodetypes import Member, MembershipList
 
 if TYPE_CHECKING:
+    from Node.LoadBalancer.LoadBalancer import LoadBalancer
+
     from ML.modeltypes import MLModelType
     from Node.node import NodeTCPServer
-    from Node.nodetypes import Member, MembershipList
 
 
 class Scheduler:
-    def __init__(self, node: "NodeTCPServer", load_balancer: "LoadBalancer"):
+    def __init__(self, node: "NodeTCPServer"):
         self.batches = []
         self.node = node
-        self.load_balancer = load_balancer
 
     def schedule(self, batch):
         self.batches.append(batch)
@@ -53,7 +53,7 @@ class Scheduler:
             return
 
         # send the batch to the node
-        results = await self.load_balancer.dispatch(batch)
+        results = await self.node.load_balancer.dispatch(batch)
         if results is None:
             # insert the batch back into the queue
             self.schedule(batch)

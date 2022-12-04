@@ -12,7 +12,7 @@ from typing import Any, List, Optional, Tuple, Dict
 import random
 
 from FileStore.FileStore import File, FileStore
-from ML.modeltypes import ClassifierModel, DatasetType, DummyModel
+from ML.modeltypes import ClassifierModel, DummyModel
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -23,6 +23,7 @@ from Node.messages import (
     FileMessage,
 )
 from .LoadBalancer.LoadBalancer import LoadBalancer
+from .LoadBalancer.Scheduler import Scheduler
 from .nodetypes import (
     MembershipList,
     Member,
@@ -47,11 +48,11 @@ from .utils import (
 # and connects to the introducer server via a tcp socket
 class NodeTCPServer(socketserver.ThreadingTCPServer):
     def __init__(
-        self,
-        host,
-        port,
-        is_introducer=False,
-        slow_mode=False,
+            self,
+            host,
+            port,
+            is_introducer=False,
+            slow_mode=False,
     ):
         # call the super class constructor
         super().__init__((host, port), NodeHandler, bind_and_activate=False)
@@ -89,13 +90,12 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.dnsdaemon_ip = socket.gethostbyname(host)
         # self.election_info = NodeElectInfo()
 
-        # init the load balancer, if necessary
+        # init the load balancer, if necessart
         if self.is_introducer:
+            self.scheduler = Scheduler(self)
             self.load_balancer = LoadBalancer(self)
 
         # init the models
-        self.model1 = DummyModel(DatasetType.OXFORD_PETS)
-        self.model2 = DummyModel(DatasetType.CIFAR10)
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -341,7 +341,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             return None
 
     def broadcast_to(
-        self, message: Message, members: List[Member], recv=False
+            self, message: Message, members: List[Member], recv=False
     ) -> Dict[Member, Any]:
         """
         Broadcast a message to all `members`
@@ -350,9 +350,14 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         :param recv: Whether or not to receive a response from the members
         :return: a dict of neighbors and whether the message was sent successfully
         """
+
         member_to_response = {}
 
-        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+        if len(members) == 0:
+            # no members?
+            return member_to_response
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(members)) as executor:
             # Start the broadcast operations and get whether send was successful for each neighbor
             future_to_member = {
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
@@ -465,7 +470,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             nodes_with_file = adjusted_membership_list.find_machines_with_file(
                 file_name, file_version=file_version
             )
-            machines_without_file = adjusted_membership_list.find_machines_without_file(
+            machines_without_file = adjusted_membership_list.find_members_without_file(
                 file_name, file_version=file_version
             )
             if len(machines_without_file) == 0 or len(nodes_with_file) == 0:
