@@ -23,8 +23,6 @@ import struct
 
 TODO: Add additional fields
 
-Tentatively, the dataset type is not being used since we have a 1 to 1
-mapping between the model and dataset.
 """
 
 ML_BASE_FORMAT = "!I4sHI"
@@ -40,13 +38,12 @@ class MLMessage(Message):
         timestamp: int,
         model_type: ModelType,
         batch_id: int,
-        file_list: list
+        file_list: list,
     ):
         super().__init__(message_type, ip, port, timestamp)
         self.model_type = model_type
         self.batch_id = batch_id
         self.file_list_string = ":::".join(file_list)
-
 
     def __str__(self):
         return f"{super().__str__()} dataset_type={self.dataset_type} model_type={self.model_type}"
@@ -67,7 +64,6 @@ class MLMessage(Message):
                 ip,
                 port,
                 timestamp,
-                dataset_type,
                 model_type,
                 batch_id,
                 file_list_string,
@@ -88,4 +84,3 @@ class MLMessage(Message):
                 f"Error deserializing MLMessage: {len(data)} received, with data: {data}"
             )
             raise struct.error("Error deserializing MLMessage")
-
