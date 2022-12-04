@@ -1,5 +1,5 @@
 from typing import TYPE_CHECKING, Optional
-from Node.LoadBalancer.Job import Job
+from Node.LoadBalancer.Batch import Batch
 from Node.LoadBalancer.LoadBalancer import LoadBalancer
 
 if TYPE_CHECKING:
@@ -10,53 +10,52 @@ if TYPE_CHECKING:
 
 class Scheduler:
     def __init__(self, node: "NodeTCPServer", load_balancer: "LoadBalancer"):
-        self.jobs = []
+        self.batches = []
         self.node = node
         self.load_balancer = load_balancer
 
-    def schedule(self, job):
-        self.jobs.append(job)
+    def schedule(self, batch):
+        self.batches.append(batch)
 
-    def get_next_job(self) -> Optional[Job]:
-        """Get the next job in the queue"""
-        if len(self.jobs) == 0:
+    def schedule_on(self, node: Member, batch: Batch):
+        """Schedule a batch on a specific model"""
+        batch.node_scheduled_on = node
+        self.schedule(batch)
+
+    def get_next_batch(self) -> Optional[Batch]:
+        """Get the next batch in the queue"""
+        if len(self.batches) == 0:
             return None
-        return self.jobs[0]
+        return self.batches[0]
 
-    def pop_next_job(self) -> Optional[Job]:
-        """Get the next job in the queue"""
-        if len(self.jobs) == 0:
+    def pop_next_batch(self) -> Optional[Batch]:
+        """Get the next batch in the queue"""
+        if len(self.batches) == 0:
             return None
-        return self.jobs.pop(0)
+        return self.batches.pop(0)
 
-    def get_next_job_on(self, node: Member) -> Optional[Job]:
-        """Get the next job for the node"""
-        # get the next job for the node
-        # if there are no jobs, return None
-        for job in self.jobs:
-            if job.node_scheduled_on == node:
-                return job
+    def get_next_batch_on(self, node: Member) -> Optional[Batch]:
+        """Get the next batch for the node"""
+        # get the next batch for the node
+        # if there are no batchs, return None
+        for batch in self.batches:
+            if batch.node_scheduled_on == node:
+                return batch
         return None
 
     async def dispatch(self):
-        """Dispatch a job to a node"""
-        # get the next job, and send the job to the node
-        # if there are no jobs, return
-        job = self.pop_next_job()
-        if job is None:
+        """Dispatch a batch to a node"""
+        # get the next batch, and send the batch to the node
+        # if there are no batchs, return
+        batch = self.pop_next_batch()
+        if batch is None:
+            # no batchs to dispatch
             return
 
-        # get the best node for the job
-        best_node = self.load_balancer.get_best_node(job)
-        if best_node is None:
-            # insert the job back into the queue
-            self.schedule(job)
-            return
+        # send the batch to the node
+        results = await self.load_balancer.dispatch(batch)
+        if results is None:
+            # insert the batch back into the queue
+            self.schedule(batch)
 
-        # send the job to the node
-        results = self.node.broadcast_to(job.serialize(), best_node, recv=True)
-
-    def schedule_on(self, node: Member, job: Job):
-        """Schedule a job on a specific model"""
-        job.node_scheduled_on = node
-        self.schedule(job)
+        return results
