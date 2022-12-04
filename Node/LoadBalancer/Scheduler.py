@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Optional
+import asyncio
+from typing import TYPE_CHECKING, Optional, Any, Coroutine
 from Node.LoadBalancer.Batch import Batch
 from Node.nodetypes import Member, MembershipList
 
@@ -11,37 +12,22 @@ if TYPE_CHECKING:
 
 class Scheduler:
     def __init__(self, node: "NodeTCPServer"):
-        self.batches = []
+        self.batches = asyncio.Queue()
         self.node = node
 
     def schedule(self, batch):
-        self.batches.append(batch)
+        self.batches.put_nowait(batch)
 
     def schedule_on(self, node: Member, batch: Batch):
         """Schedule a batch on a specific model"""
         batch.node_scheduled_on = node
         self.schedule(batch)
 
-    def get_next_batch(self) -> Optional[Batch]:
+    async def pop_next_batch(self) -> Coroutine[Any, Any, Optional[Batch]]:
         """Get the next batch in the queue"""
-        if len(self.batches) == 0:
+        if self.batches.qsize() == 0:
             return None
-        return self.batches[0]
-
-    def pop_next_batch(self) -> Optional[Batch]:
-        """Get the next batch in the queue"""
-        if len(self.batches) == 0:
-            return None
-        return self.batches.pop(0)
-
-    def get_next_batch_on(self, node: Member) -> Optional[Batch]:
-        """Get the next batch for the node"""
-        # get the next batch for the node
-        # if there are no batchs, return None
-        for batch in self.batches:
-            if batch.node_scheduled_on == node:
-                return batch
-        return None
+        return self.batches.get()
 
     async def dispatch(self):
         """Dispatch a batch to a node"""

@@ -560,13 +560,6 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
             raise NotImplementedError
 
-        elif message.message_type == MessageType.QUERY_COMPLETE:
-            raise NotImplementedError
-            # This is received by the coordinator
-            # Increment query counter by 1.
-            # Done
-            # Perhaps just use BATCH_COMPLETE?
-
         elif message.message_type == MessageType.BATCH_COMPLETE:
             raise NotImplementedError
             # This is received by the coordinator

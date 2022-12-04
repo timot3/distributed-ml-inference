@@ -39,7 +39,7 @@ class MessageType(IntEnum):
     SET_BATCH_SIZE = 23  # Client to all nodes
 
     SCHEDULE_BATCH = 24  # Coordinator to node
-    QUERY_COMPLETE = 25  # Node to coordinator, only use to measure rate
+    # QUERY_COMPLETE = 25  # Node to coordinator, only use to measure rate
     BATCH_COMPLETE = 26  # Node to coordinator
     INVALIDATE_BATCH = 27  # Coordinator to node
     INVALIDATE_ALL_IN_NODE = 28  # Coordinator to node

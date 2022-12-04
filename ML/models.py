@@ -13,7 +13,7 @@ from threading import Lock, Thread
 from fastai.vision.all import *
 
 
-from ML.messages import get_file_get_msg
+from ML.messages import get_file_get_msg, get_batch_complete_msg
 from ML.modeltypes import ModelType
 from ML.utils import load_learner
 
@@ -233,6 +233,9 @@ class DummyModelCollection:
     def infer(self, batch_id, file_list):
         time.sleep(1)
         self.successful_batch(file_list)
+
+    def insert_batch(self, request, model_type, batch_id, file_list):
+        return self.infer(batch_id, file_list)
 
     def successful_batch(self, predictions):
         # contact the coordinator with results of the batch
