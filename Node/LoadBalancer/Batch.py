@@ -1,3 +1,4 @@
+import time
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ML.messages import MLMessage
@@ -12,13 +13,15 @@ def get_job_id_hash(files: List[str]) -> int:
     return hash("".join(files))
 
 
-class Job:
+class Batch:
     def __init__(self, model: MLModelType, files: List[str]):
         self.model = model
         self.files = files
         self.id = get_job_id_hash(files)
         self.result = None
         self.node_scheduled_on = None
+        self.time_started = None
+        self.time_ended = None
 
     def __eq__(self, other):
         return self.id == other.id
@@ -28,9 +31,16 @@ class Job:
 
     def schedule(self, node: "Member"):
         self.node_scheduled_on = node
+        self.time_started = int(time.time())
 
     def complete(self, result: Union[bytes, bytearray]):
         self.result = result
+        self.time_ended = int(time.time())
+
+    def get_completion_time(self) -> Optional[int]:
+        if self.time_started is None or self.time_ended is None:
+            return None
+        return self.time_ended - self.time_started
 
     def get_result(self) -> Optional[Union[bytes, bytearray]]:
         return self.result
@@ -44,3 +54,12 @@ class Job:
         timestamp = self.node_scheduled_on.timestamp
         msg = MLMessage(MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model, 0, 1)
         return msg
+
+
+class BatchResult:
+    def __init__(self, job: Batch):
+        self.job = job
+        self.id = job.id
+        self.files = job.files
+        self.result = job.result
+        self.time_to_complete = job.get_completion_time()

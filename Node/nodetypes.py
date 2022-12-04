@@ -7,12 +7,14 @@ It also contains useful magic number variables.
 
 import socket
 import struct
+import time
 from enum import Enum, IntEnum
 from typing import List, Any, Optional, Set, Tuple, Union
 import logging
 from threading import Lock
 
 from FileStore.FileStore import File, FileStore
+from ML.modeltypes import ModelType
 
 lock = Lock()
 
@@ -27,6 +29,8 @@ INTRODUCER_PORT = 8080
 ELECT_LEADER_TIMEOUT = 3
 
 REPLICATION_LEVEL = 4
+
+NUM_JOBS = 2  # resnet, alexnet
 
 
 # PORT IDs
@@ -53,13 +57,65 @@ class bcolors:
     UNDERLINE = "\033[4m"
 
 
+class ActiveBatch:
+    def __init__(self, batch_id: int):
+        self.batch_id = batch_id
+        self.start_time = int(time.time())
+        self.end_time = None
+        self.duration = None
+
+    def finish(self):
+        self.end_time = int(time.time())
+        self.duration = self.end_time - self.start_time
+
+    def __eq__(self, other):
+        return self.batch_id == other.batch_id
+
+
+class LoadRepresentation:
+    """
+    Load is defined as the sum of time a node has spent processing batches over the last 10 seconds.
+    """
+
+    def __init__(self, model_type):
+        self.load = 0
+        self.model_type = model_type
+        self.batches = []
+
+    def add_batch(self, batch: ActiveBatch):
+        self.batches.append(batch)
+
+    def remove_batch(self, batch):
+        self.batches.remove(batch)
+
+    def get_load(self):
+        """
+        Determine the load over the last 10 seconds. If there are any batches older than 10 seconds,
+        remove them from batches and update the load.
+
+        Returns: the load over the last 10 seconds
+        """
+        current_time = int(time.time())
+        for batch in self.batches:
+            if current_time - batch.start_time > 10:
+                self.remove_batch(batch)
+        if len(self.batches) == 0:
+            return 0
+        return sum(batch.duration for batch in self.batches) / 10
+
+
 class Member:
     def __init__(self, ip: str, port: int, timestamp: int, last_heartbeat: int = 0):
         self.ip: str = ip
         self.port: int = port
         self.timestamp: int = timestamp
         self.files: FileStore = FileStore()
-        self.active_queries = List[str]
+        self.active_queries = List[int]
+
+        # load representation
+        self.loads = {}
+        for model_type in range(NUM_JOBS):
+            self.loads[ModelType(model_type)] = LoadRepresentation(ModelType(model_type))
 
         if last_heartbeat == 0:
             self.last_heartbeat = timestamp
@@ -81,7 +137,7 @@ class Member:
 
     def __lt__(self, other):
         if self == other:
-            logging.warn(
+            logging.warning(
                 f"Exactly the same elements detected when doing a less than comparison"
             )
         if self.timestamp == other.timestamp:
@@ -91,6 +147,28 @@ class Member:
 
     def __hash__(self):
         return hash((self.ip, self.port, self.timestamp))
+
+    def get_load(self, model_type: ModelType) -> int:
+        return self.loads[model_type].get_load()
+
+    def get_least_loaded_model(self) -> ModelType:
+        """Gets the model type that is least loaded on this machine
+
+        Returns:
+            ModelType: The model type that is least loaded on this machine
+        """
+        least_loaded_model = ModelType(0)
+        least_load = self.loads[least_loaded_model].get_load()
+        for model_type in range(1, NUM_JOBS):
+            model_type = ModelType(model_type)
+            load = self.loads[model_type].get_load()
+            if load < least_load:
+                least_loaded_model = model_type
+                least_load = load
+        return least_loaded_model
+
+    def get_total_load(self):
+        return sum(load.get_load() for load in self.loads.values())
 
     def to_tuple(self):
         return self.ip, self.port, self.timestamp
