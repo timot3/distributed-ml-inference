@@ -11,6 +11,12 @@ from queue import Queue
 from threading import Lock, Thread
 
 from ML.utils import load_learner
+from Node.messages import (
+    Message,
+    MessageType,
+    FileMessage,
+)
+from Node.node import NodeTCPServer
 
 
 class ToDoException(Exception):
@@ -21,7 +27,7 @@ class ToDoException(Exception):
 
 class ModelType(IntEnum):
     RESNET = 0
-    ALEXNET = 1
+    IMAGENET = 1
     UNSPECIFIED = 2
 
 
@@ -31,28 +37,9 @@ QUEUE_CAPACITY = 64  # Arbitrary
 class MLModel:
     def __init__(self):
         self.model = None
+        # Hyperparameter to be set.
+        # Utility comes from using this after coordinator failure
         self.batch_size = 1
-
-        # We let the queue be a queue of lists of images.
-        # We do not want insertion to block, so we manually track queue depth rather
-        # than instantiating it with one.
-        self.batch_queue = Queue()
-        # This accomodates having batch size be != 1, and have the design
-        # infer 1 picture at once - less efficient than inferring entire
-        # batch but much better load balance
-        self.image_fname_queue = Queue()
-        # Only useful for defensive programming
-        # Restrict this variable to inside infer_batch only if not
-        # coding asserts
-        self.cur_batch_size = self.batch_size
-        self.predictions_lock = Lock()
-        self.output_predictions = []
-        self.queries = 0  # Includes those not committed into FS
-        self.complete_queries = 0
-        self.complete_queries_prev = 0
-        self.complete_queries_in_interval = 0
-        self.complete_queries_lock = Lock()
-        self.query_interval = 0.1
 
     """
     Remove this, the dataset should be filled in via SDFS.
@@ -73,93 +60,8 @@ class MLModel:
     def train(self):
         raise NotImplementedError
 
-    # TODO: Corner case - FIFO is filled up. Handle outside function or inside?
-    def enqueue_batch(self, file_names: List):
-        # Spawn thread to collect relevant information (image(s))
-        # Thread should just get the file(s) from sdfs
-        image_list = []
-        for f in file_names:
-            # TODO: implement get from SDFS
-            image = None
-            image_list.append((image, f))
-            pass
-        # Add the image(s) to the queue
-        self.batch_queue.put(image_list)
-        self.enqueue_images()
-
-    # This will be called after an enqueue batch and after inferring
-    # an entire batch.
-    def enqueue_images(self):
-        # Make sure batch queue has entries
-        # Guarantees that the predictions are updated properly too.
-        with self.predictions_lock:
-            if self.batch_queue.empty():
-                return
-            else:
-                batch = self.batch_queue.get()
-            # Slight overengineering to account for possibility that the batch size
-            # is changed, even though it shouldn't be in the demo.
-            # Otherwise we can use self.batch_size
-            self.cur_batch_size = len(batch)
-            for x in batch:
-                self.image_fname_queue.put(x)
-            self.output_predictions = []
-
-    def check_batch_successful(self):
-        with self.predictions_lock:
-            return len(self.output_predictions) == self.cur_batch_size
-
-    # Use a thread to run this
-    def successful_batch(self):
-
-        # TODO: Write this batch's results into SDFS
-        # Write self.output_predictions to SDFS
-        pass
-
-        # Write successful, inform dispatcher that batch is done.
-        # Also inform dispatcher the file name written into SDFS
-        # using the same message
-        # TODO: Inform dispatcher
-
-        # TODO: Account for coordinator failures/change of leader etc. This should be done in a future phase, not now.
-        with self.complete_queries_lock:
-            self.complete_queries += len(self.output_predictions)
-
-    def infer_once(self):
-        # Empty queue, wait for it to fill up
-        if self.image_fname_queue.empty():
-            time.sleep(0.001)
-
-        else:
-            img_fname = self.image_fname_queue.get()
-            self.infer_single_image(img_fname)
-
-        self.queries += 1
-
-    # Image should be a single image, we do NOT want batch prediction
-    # Easier to load balance
-    def infer_single_image(self, img_fname):
-        image, file_name = img_fname
-        pred = self.model.predict(image)
-        with self.predictions_lock:
-            self.output_predictions.append(self.model.predict(image))
-        return
-
     def set_batch_size(self, val: int):
         self.batch_size = val
-
-    def update_query_counts(self):
-        with self.complete_queries_lock:
-            self.complete_queries_in_interval = (
-                self.complete_queries - self.complete_queries_prev
-            )
-            self.complete_queries_prev = self.complete_queries
-        time.sleep(self.query_interval)
-
-    def get_query_rate(self):
-        with self.complete_queries_lock:
-            q = self.complete_queries_in_interval
-        return q / self.query_interval
 
 
 class ClassifierModel(MLModel):
@@ -203,10 +105,17 @@ class DummyModel(MLModel):
 
 
 class ModelCollection:
-    def __init__(self) -> None:
+    def __init__(self, server: NodeTCPServer) -> None:
+        self.server = server
         self.resnet = ClassifierModel(ModelType.RESNET)
         self.imagenet = ClassifierModel(ModelType.IMAGENET)
         self.workDistThread = Thread()
+        self.batch_lock = Lock()
+        self.current_batch_id = None
+        self.current_image_list = None
+        self.current_model_type = None
+
+        """
         self.probScaleThread = Thread()
         # Dynamically adjusted based on query rates
         # Assumption: Infinite work to do, so we will not need to account
@@ -214,7 +123,9 @@ class ModelCollection:
         # Therefore, we can just use local query rates of the 2 models to
         # control this probability.
         self.pick_resnet_prob = 0.5
+        """
 
+    """
     # To be run by ProbScaleThread
     def update_formula(self):
         # Scaling factor k on probability will equalize the query rate
@@ -256,3 +167,63 @@ class ModelCollection:
             # (non-atomic), enqueue images will check if the queue is filled
             # up if there was a batch enqueue, so there will not be lost data.
             chosen_model.enqueue_images()
+    """
+
+    def select_model(self, model: ModelType):
+        if model == ModelType.RESNET:
+            return self.resnet
+        else:
+            return self.imagenet
+
+    def infer(self):
+        with self.batch_lock:
+            assert self.current_batch is not None
+            self.model = self.select_model(self.current_model_type)
+            pred = self.model.predict(self.current_batch)
+            # TODO: Store into SDFS
+            # Create a message of the prediction and send it back.
+            self.successful_batch(pred)
+
+    def insert_batch(self, model_type, batch_id, file_list):
+        image_list = []
+        for f in file_list:
+            # Load from SDFS
+            msg = FileMessage(
+                MessageType.GET,
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                f,
+                0,
+                b"",
+            )
+            introducer_member = self.server.membership_list[0]
+            # Currently, read or send get to coordinator
+            # TODO: Account for failure
+            img = self.server.broadcast_to(msg, [introducer_member], recv=True)
+            file_list.append(img)
+
+        with self.batch_lock:
+            self.current_image_list = image_list
+            self.current_batch_id = batch_id
+            self.current_model_type = model_type
+
+    def successful_batch(self, predictions):
+        raise NotImplementedError
+
+        # TODO: Write this batch's results into SDFS
+        # Write self.output_predictions to SDFS
+
+        # Write successful, inform dispatcher that batch is done.
+        # Also inform dispatcher the file name written into SDFS
+        # using the same message
+        # TODO: Change the Message to one with the filename
+        msg = Message(
+            MessageType.BATCH_COMPLETE,
+            self.server.host,
+            self.server.port,
+            self.server.timestamp,
+        )
+        # TODO: Inform scheduler
+        introducer_member = self.server.membership_list[0]
+        self.server.broadcast_to(msg, [introducer_member], recv=True)

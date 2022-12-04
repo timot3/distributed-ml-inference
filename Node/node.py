@@ -12,7 +12,7 @@ from typing import Any, List, Optional, Tuple, Dict
 import random
 
 from FileStore.FileStore import File, FileStore
-from ML.modeltypes import ClassifierModel, DummyModel
+from ML.modeltypes import ClassifierModel, DummyModel, ModelCollection
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -96,6 +96,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             self.load_balancer = LoadBalancer(self)
 
         # init the models
+        self.model_collection = ModelCollection(self)
+
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
