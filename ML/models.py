@@ -62,6 +62,7 @@ class ClassifierModel(MLModel):
         super().__init__()
         self.model_type = model_type
         self.model = self.train()
+        print(self.model)
 
     def _load(self, model_pkl_path: str):
         # load the model from the pkl file into a fastai vision_learner
@@ -93,17 +94,6 @@ class ClassifierModel(MLModel):
         return self.model.predict(img)
 
 
-class DummyModel(MLModel):
-    def __init__(self):
-        super().__init__()
-
-    def _load(self, model_pkl_path: str):
-        pass
-
-    def train(self):
-        pass
-
-
 class ModelCollection:
     def __init__(self, server: "NodeTCPServer") -> None:
         self.server = server
@@ -121,20 +111,28 @@ class ModelCollection:
         self.current_batch = None
 
     def select_model(self, model: ModelType):
-        if model == ModelType.RESNET:
+        if model == ModelType.UNSPECIFIED:
+            # pick resnet with 70% probability
+            if random.random() < 0.7:
+                return self.resnet
+            else:
+                return self.alexnet
+        elif model == ModelType.RESNET:
             return self.resnet
-        elif model == ModelType.ALEXNET:
-            return self.alexnet
         else:
-            return None
+            return self.alexnet
+
+    def get_batch_size(self, model: ModelType):
+        model = self.select_model(model)
+        return model.batch_size
 
     def infer(self):
         start = time.time()
         assert self.current_batch is not None
-        self.model = self.select_model(self.current_batch.model_type)
+        model = self.select_model(self.current_batch.model_type)
         pred = []
         for img in self.current_image_list:
-            pred.append(self.model.predict(img))
+            pred.append(model.predict(img))
             # print(f"Predicted: {pred[-1]}")
         self.successful_batch(pred)
         end = time.time()
@@ -144,15 +142,21 @@ class ModelCollection:
         successful_acquire = self.batch_lock.acquire(False)
         if not successful_acquire:
             # Send NACK to sender
-            msg = get_batch_complete_msg(
-                self.server,
-                self.current_batch.model_type,
-                self.current_batch.id,
-                self.current_batch.files,
-            )
-            introducer_member = self.server.membership_list[0]
-            self.server.broadcast_to(msg, [introducer_member])
-            return
+            if self.current_batch is not None:
+                msg = get_batch_complete_msg(
+                    self.server,
+                    self.current_batch.model_type,
+                    self.current_batch.id,
+                    self.current_batch.files,
+                    None,
+                )
+            else:
+                msg = get_batch_complete_msg(
+                    self.server, model_type, batch_id, file_list, None
+                )
+                introducer_member = self.server.membership_list[0]
+                self.server.broadcast_to(msg, [introducer_member])
+                return
 
         image_list = []
         # print(f"FILE_LIST: {file_list}")
@@ -168,10 +172,10 @@ class ModelCollection:
             img_fastai = PILImage.create(received_data[introducer_member].data)
             image_list.append(img_fastai)
 
-            # with self.batch_lock:
-            self.current_batch = Batch(model_type, file_list)
-            self.current_image_list = image_list
-            self.infer()
+        # with self.batch_lock:
+        self.current_batch = Batch(model_type, file_list)
+        self.current_image_list = image_list
+        self.infer()
 
         self.batch_lock.release()
 

@@ -71,9 +71,13 @@ class LoadRepresentation:
 
     def add_batch(self, batch: Batch):
         self.batches.append(batch)
+        self.load += len(batch.files)
 
-    def remove_batch(self, batch):
+    def remove_batch(self, batch: Batch):
         self.batches.remove(batch)
+        self.load -= len(batch.files)
+        if self.load < 0:
+            self.load = 0
 
     def get_load(self):
         """

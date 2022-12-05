@@ -14,7 +14,7 @@ import random
 
 from FileStore.FileStore import File, FileStore
 from ML.messages import MLClientInferenceResponse
-from ML.models import ClassifierModel, DummyModel, ModelCollection
+from ML.models import ModelCollection
 from ML.modeltypes import ModelType
 from Node.handler import NodeHandler
 from Node.messages import (

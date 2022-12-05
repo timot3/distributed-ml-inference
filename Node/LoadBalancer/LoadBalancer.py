@@ -1,5 +1,5 @@
 """Load balancer for the ML queries"""
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 from ML.modeltypes import ModelType
 from Node.LoadBalancer.Scheduler import Scheduler
@@ -17,6 +17,12 @@ class LoadBalancer:
     def __init__(self, node: "NodeTCPServer"):
         self.node = node
         self.node.load_balancer = self
+        self.previous_model = ModelType.RESNET
+
+        self.total_query_count = 0
+        self.query_counts_by_model = {
+            model: 0 for model in ModelType if model != ModelType.UNSPECIFIED
+        }
 
     def get_best_model(self) -> ModelType:
         """Get the least loaded (by time of inference) model.
@@ -25,20 +31,27 @@ class LoadBalancer:
         and return that model.
         """
 
-        model_loads = {}
-        for model in ModelType:
-            if model == ModelType.UNSPECIFIED:
-                continue
-            model_loads[model] = self.node.membership_list.get_model_load(model)
+        if self.previous_model == ModelType.RESNET:
+            self.previous_model = ModelType.ALEXNET
+            return ModelType.ALEXNET
+        else:
+            self.previous_model = ModelType.RESNET
+            return ModelType.RESNET
 
-        # print the difference between the models' loads, in percent
-        print("Model loads:")
-        for model in ModelType:
-            if model == ModelType.UNSPECIFIED:
-                continue
-            print(f"{model.name}: {model_loads[model]}")
+        # model_loads = {}
+        # for model in ModelType:
+        #     if model == ModelType.UNSPECIFIED:
+        #         continue
+        #     model_loads[model] = self.node.membership_list.get_model_load(model)
 
-        # get the model with the least load
+        # # print the difference between the models' loads, in percent
+        # print("Model loads:")
+        # for model in ModelType:
+        #     if model == ModelType.UNSPECIFIED:
+        #         continue
+        #     print(f"{model.name}: {model_loads[model]}")
+
+        # # get the model with the least load
         return min(model_loads, key=model_loads.get)
 
     async def dispatch(self, batch: Batch) -> BatchResult:
@@ -69,7 +82,9 @@ class LoadBalancer:
         # dispatch the job to the node
         return await self.dispatch_to_node(node, batch)
 
-    async def dispatch_to_node(self, node: "Member", batch: Batch) -> BatchResult:
+    async def dispatch_to_node(
+        self, node: "Member", batch: Batch
+    ) -> Optional[BatchResult]:
         """Dispatch a job to a node
 
         :param node: The node to dispatch the job to
@@ -86,5 +101,11 @@ class LoadBalancer:
         if result is None or result.message_type == MessageType.BATCH_FAILED:
             return None
         print(result)
-        # TODO: Increment the query count for result.model_type
+
+        # update the query counts
+        batch_size = self.node.model_collection.get_batch_size(result.model_type)
+        self.total_query_count += batch_size
+        self.query_counts_by_model[result.model_type] += batch_size
+
+        # return the result
         return BatchResult(batch, result)

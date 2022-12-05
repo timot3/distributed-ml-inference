@@ -21,10 +21,13 @@ if __name__ == "__main__":
     parser.add_argument("--local", action="store_true", help="Run the client locally")
     parser.add_argument("--menu", action="store_true", help="Run the client in menu mode")
     parser.add_argument(
-        "--num-files", type=int, default=100, help="Number of files to test"
+        "--num-files", type=int, default=10, help="Number of files to test"
     )
     parser.add_argument(
-        "--num-batches", type=int, default=10, help="Number of batches to test"
+        "--num-batches", type=int, default=3, help="Number of batches to test"
+    )
+    parser.add_argument(
+        "--batch-size", type=int, default=4, help="Number of files per batch"
     )
 
     args = parser.parse_args()
@@ -38,7 +41,7 @@ if __name__ == "__main__":
     DIRECTORY_PREFIX = "ML/datasets/oxford_pets/"
 
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
-    first_10_files = os.listdir(DIRECTORY_PREFIX)
+    first_10_files = random.sample(os.listdir(DIRECTORY_PREFIX), args.num_files)
     for file_name in first_10_files:
         if file_name.endswith(".jpg"):
             # load the file into sdfs
@@ -52,10 +55,8 @@ if __name__ == "__main__":
     # inference
     # let's do inference on the first file in the directory1
 
-    # for i in range(args.num_batches):
-    #     file_names = random.sample(first_10_files, 8)
-    #     print(file_names)
-    #     ml_message = make_ml_classification_message(file_names, HOST, PORT)
-    #     response = send_message(HOST, PORT, ml_message, recv=False)
-
-    start = time.time()
+    for i in range(args.num_batches):
+        file_names = random.sample(first_10_files, args.batch_size)
+        print(file_names)
+        ml_message = make_ml_classification_message(file_names, HOST, PORT)
+        response = send_message(HOST, PORT, ml_message, recv=False)

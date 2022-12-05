@@ -153,7 +153,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # get the nodes that were successful and add the file to them
             for node, success in results.items():
                 if success:
-                    self.server.logger.info(f"Storing file on {node.ip}:{node.port}")
+                    self.server.logger.debug(f"Storing file on {node.ip}:{node.port}")
                     # find the node in the membership list
                     # and update the files that it has
                     node_member = self.server.membership_list.get_machine(node)
@@ -197,7 +197,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             b"",  # no data -- this is an ack
         )
 
-        self.server.logger.info(f"Replying with {client_ack_message}")
+        self.server.logger.debug(f"Replying with {client_ack_message}")
         self.request.sendall(add_len_prefix(client_ack_message.serialize()))
 
         # DEBUGGING PURPOSES: Print the membership list --> files that each node has
@@ -267,7 +267,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             files_to_send,
         )
 
-        self.server.logger.info(f"Replying with {file_list_message}")
+        self.server.logger.debug(f"Replying with {file_list_message}")
         self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
     def _process_get(self, message, versions=None) -> None:

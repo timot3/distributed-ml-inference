@@ -3,6 +3,7 @@ import socket
 import struct
 import textwrap
 import time
+import traceback
 from typing import Optional, Tuple, Union, List
 
 from ML.messages import (
@@ -66,6 +67,7 @@ def _send(
 
     except Exception as e:
         logger.error(f"Error sending message: {e}")
+        print(traceback.format_exc())
     finally:
         return False
 
@@ -77,8 +79,12 @@ def _recvall(sock: socket.socket, logger: Optional[logging.Logger] = None) -> by
     data = bytearray()
     rec = sock.recv(BUFF_SIZE)
     # remove the length prefix
-    msg_len, msg = trim_len_prefix(rec)
-    data.extend(msg)
+    try:
+        msg_len, msg = trim_len_prefix(rec)
+        data.extend(msg)
+    except struct.error:
+        print(data)
+        raise
     # read the rest of the data, if any
     while len(data) < msg_len:
         msg = sock.recv(BUFF_SIZE)
