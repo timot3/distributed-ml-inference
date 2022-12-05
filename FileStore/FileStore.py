@@ -37,24 +37,21 @@ class File:
         # 32 bytes for the filename
         # 4 bytes for the version
         # 4 bytes for the length of the data in bytes
-        # all of this is separated by a colon
 
         # use struct.pack to pack the data into bytes
         name_bytes = struct.pack(">32s", self.file_name.encode("utf-8"))
         version_bytes = struct.pack(">I", self.version)
         size_bytes = struct.pack(">I", self.file_size)
-        ret = name_bytes + b":" + version_bytes + b":" + size_bytes
-        return ret
+        return name_bytes + version_bytes + size_bytes
 
     @classmethod
     def ls_deserialize(cls, data: Union[bytes, bytearray]):
         # use struct.unpack to unpack the data from bytes
-        name, version, size = data.split(b":")
-        name = struct.unpack(">32s", name)[0].rstrip(b"\x00").decode("utf-8")
+
+        name_bytes, version, size = struct.unpack(">32sII", data)
+        name = name_bytes.rstrip(b"\x00").decode("utf-8")
         # the next 4 bytes are the version
-        version = struct.unpack(">I", version)[0]
         # the next 4 bytes are the size of the file
-        size = struct.unpack(">I", size)[0]
 
         return cls(name, b"", filesize=int(size), version=int(version))
 

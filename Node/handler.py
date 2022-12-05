@@ -153,7 +153,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # get the nodes that were successful and add the file to them
             for node, success in results.items():
                 if success:
-                    self.server.logger.info(f"Storing file on {node.ip}:{node.port}")
+                    self.server.logger.debug(f"Storing file on {node.ip}:{node.port}")
                     # find the node in the membership list
                     # and update the files that it has
                     node_member = self.server.membership_list.get_machine(node)
@@ -197,7 +197,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             b"",  # no data -- this is an ack
         )
 
-        self.server.logger.info(f"Replying with {client_ack_message}")
+        self.server.logger.debug(f"Replying with {client_ack_message}")
         self.request.sendall(add_len_prefix(client_ack_message.serialize()))
 
         # DEBUGGING PURPOSES: Print the membership list --> files that each node has
@@ -267,7 +267,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             files_to_send,
         )
 
-        self.server.logger.info(f"Replying with {file_list_message}")
+        self.server.logger.debug(f"Replying with {file_list_message}")
         self.request.sendall(add_len_prefix(file_list_message.serialize()))
 
     def _process_get(self, message, versions=None) -> None:
@@ -520,16 +520,16 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
-            self.server.logger.info(f"Received PUT request for {message.file_name}")
+            self.server.logger.debug(f"Received PUT request for {message.file_name}")
             self._process_put(message)
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
-            self.server.logger.info(f"Received GET request for {message.file_name}")
+            self.server.logger.debug(f"Received GET request for {message.file_name}")
             self._process_get(message)
 
         elif message.message_type == MessageType.GET_VERSIONS:
-            self.server.logger.info(
+            self.server.logger.debug(
                 f"Received GET_VERSIONS request for {message.file_name}"
             )
             self._process_get(message, versions=message.versions)
@@ -542,7 +542,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         elif message.message_type == MessageType.FILE_ACK:
             # construct member from message
             ack_member = Member(message.ip, message.port, message.timestamp)
-            self.server.logger.info(f"Received FILE_ACK from {ack_member}")
+            self.server.logger.debug(f"Received FILE_ACK from {ack_member}")
 
         elif message.message_type == MessageType.LS:
             self._process_ls(message)
@@ -566,9 +566,15 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
 
         elif message.message_type == MessageType.BATCH_COMPLETE:
-            print("Batch complete. Prediction: ", message.results)
+            print(f"Batch {message.batch_id} complete. Prediction: {message.results}")
             # This is received by the coordinator
             # Mark the batch as completed, other bookkeeping.
+
+        elif message.message_type == MessageType.BATCH_FAILED:
+            # requeue the batch
+            self.server.logger.info(
+                f"Batch {message.batch_id} failed. Requeuing for model {message.model_type}"
+            )
 
         elif message.message_type == MessageType.INVALIDATE_BATCH:
             raise NotImplementedError

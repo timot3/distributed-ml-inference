@@ -110,8 +110,8 @@ class MLClientInferenceRequest(MLMessage):
 
     @classmethod
     def deserialize(cls, data: Union[bytes, bytearray]) -> "MLMessage":
-        print(data)
-        print(len(data))
+        # print(data)
+        # print(len(data))
         message_type, ip, port, timestamp, model_type = ml_struct.unpack(
             data[: ml_struct.size]
         )
@@ -152,6 +152,7 @@ class MLClientInferenceResponse(MLMessage):
             self.timestamp,
             self.model_type.value,
         )
+        print(self.results)
         files = ";".join(self.files)
         results = ";".join(self.results)
         return (
@@ -289,6 +290,7 @@ class MLBatchResultMessage(MLMessage):
 
     def serialize(self) -> bytes:
         file_names = ";".join(self.file_names)
+        print(self.results)
         results = ";".join(self.results)
         return (
             super().serialize()
@@ -345,8 +347,8 @@ def get_batch_complete_msg(
         file_names,
         results,
     )
-    if results == None:
-        results = [""] * len(file_names)
+    if results is None:
+        msg.results = []
         msg.message_type = MessageType.BATCH_FAILED
 
     return msg
