@@ -16,8 +16,12 @@ class Scheduler:
         self.node = node
 
     def schedule(self, batch):
-        print("Scheduling batch")
+        self.node.logger.debug("Scheduling batch")
         self.batches.put_nowait(batch)
+
+    def requeue(self, batch: Batch):
+        """Requeue a batch"""
+        self.schedule(batch)
 
     def schedule_on(self, node: Member, batch: Batch):
         """Schedule a batch on a specific model"""

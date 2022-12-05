@@ -143,6 +143,7 @@ class ModelCollection:
         if not successful_acquire:
             # Send NACK to sender
             if self.current_batch is not None:
+                print("Making Nack, current batch is not None")
                 msg = get_batch_complete_msg(
                     self.server,
                     self.current_batch.model_type,
@@ -154,9 +155,12 @@ class ModelCollection:
                 msg = get_batch_complete_msg(
                     self.server, model_type, batch_id, file_list, None
                 )
-                introducer_member = self.server.membership_list[0]
-                self.server.broadcast_to(msg, [introducer_member])
-                return
+                print("Failed to acquire lock, sending NACK to introducer. Batch is None")
+
+            introducer_member = self.server.membership_list[0]
+            self.server.broadcast_to(msg, [introducer_member])
+            print("NACK sent")
+            return
 
         image_list = []
         # print(f"FILE_LIST: {file_list}")
@@ -166,14 +170,16 @@ class ModelCollection:
             introducer_member = self.server.membership_list[0]
             # Currently, read or send get to coordinator
             # TODO: Account for failure
+            print("Sending get to introducer")
             received_data = self.server.broadcast_to(msg, [introducer_member], recv=True)
+            print("Received data from introducer")
             # save the image to a temp file
 
             img_fastai = PILImage.create(received_data[introducer_member].data)
             image_list.append(img_fastai)
 
         # with self.batch_lock:
-        self.current_batch = Batch(model_type, file_list)
+        self.current_batch = Batch(model_type, file_list, batch_id)
         self.current_image_list = image_list
         self.infer()
 

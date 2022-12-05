@@ -91,21 +91,24 @@ class LoadBalancer:
         :param batch: The job to dispatch
         :return: The result of the batch
         """
+        if batch.model_type == ModelType.UNSPECIFIED:
+            batch.model_type = self.get_best_model()
         batch.schedule(node)
         # dispatch the job to the node
         print(f"Dispatching batch {batch.id} to node {node}")
         broadcast_result = self.node.broadcast_to(
-            batch.get_job_message(), [node], recv=True
+            batch.get_job_message(), [node], recv=False
         )
         result = broadcast_result[node]
-        if result is None or result.message_type == MessageType.BATCH_FAILED:
+        if not result:
+            print(f"Batch {batch.id} failed on node {node}")
             return None
-        print(result)
+        # print(result)
 
         # update the query counts
-        batch_size = self.node.model_collection.get_batch_size(result.model_type)
+        batch_size = self.node.model_collection.get_batch_size(batch.model_type)
         self.total_query_count += batch_size
-        self.query_counts_by_model[result.model_type] += batch_size
+        self.query_counts_by_model[batch.model_type] += batch_size
 
         # return the result
         return BatchResult(batch, result)

@@ -14,10 +14,12 @@ def get_job_id_hash(files: List[str]) -> int:
 
 
 class Batch:
-    def __init__(self, model: "ModelType", files: List[str]):
+    def __init__(
+        self, model: "ModelType", files: List[str], batch_id: Optional[int] = None
+    ):
         self.model_type = model
         self.files = files
-        self.id = get_job_id_hash(files)
+        self.id = batch_id if batch_id is not None else get_job_id_hash(files)
         self.result = None
         self.node_scheduled_on = None
         self.time_started = None

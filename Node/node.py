@@ -531,7 +531,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             new_file = File(file_name, b"", version=file_version)
             # store the file in the file store
             member_without_file.files.put_file(new_file, b"")
-            print(resp)
+            # print(resp)
 
         end_time = time.time()
         print(

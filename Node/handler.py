@@ -520,16 +520,16 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         # handle PUT for file store
         elif message.message_type == MessageType.PUT:
-            self.server.logger.info(f"Received PUT request for {message.file_name}")
+            self.server.logger.debug(f"Received PUT request for {message.file_name}")
             self._process_put(message)
 
         # handle GET for file store
         elif message.message_type == MessageType.GET:
-            self.server.logger.info(f"Received GET request for {message.file_name}")
+            self.server.logger.debug(f"Received GET request for {message.file_name}")
             self._process_get(message)
 
         elif message.message_type == MessageType.GET_VERSIONS:
-            self.server.logger.info(
+            self.server.logger.debug(
                 f"Received GET_VERSIONS request for {message.file_name}"
             )
             self._process_get(message, versions=message.versions)
@@ -542,7 +542,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
         elif message.message_type == MessageType.FILE_ACK:
             # construct member from message
             ack_member = Member(message.ip, message.port, message.timestamp)
-            self.server.logger.info(f"Received FILE_ACK from {ack_member}")
+            self.server.logger.debug(f"Received FILE_ACK from {ack_member}")
 
         elif message.message_type == MessageType.LS:
             self._process_ls(message)
@@ -566,9 +566,15 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
 
         elif message.message_type == MessageType.BATCH_COMPLETE:
-            print("Batch complete. Prediction: ", message.results)
+            print(f"Batch {message.batch_id} complete. Prediction: {message.results}")
             # This is received by the coordinator
             # Mark the batch as completed, other bookkeeping.
+
+        elif message.message_type == MessageType.BATCH_FAILED:
+            # requeue the batch
+            self.server.logger.info(
+                f"Batch {message.batch_id} failed. Requeuing for model {message.model_type}"
+            )
 
         elif message.message_type == MessageType.INVALIDATE_BATCH:
             raise NotImplementedError
