@@ -74,6 +74,9 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.leader_host = self.host
         self.leader_port = self.port
 
+        self.client_ip = "localhost"
+        self.client_port = 8081
+
         # initialized when the node joins the ring
         self.timestamp: int = 0
         self.member: Member = None
@@ -101,6 +104,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
 
         # init the models
         self.model_collection = ModelCollection(self)
+
+        self.inference_started = False
 
     def validate_request(self, request, message) -> bool:
         data = request[0]
@@ -613,6 +618,8 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             message.files,
         )
         self.scheduler.schedule(batch)
+        self.load_balancer.queries_started = int(time.time())
 
     def print_query_rate_sd(self):
-        return self.scheduler.get_query_rate()
+        time_since_inference = int(time.time()) - self.load_balancer.queries_started
+        return self.scheduler.get_query_rate() / time_since_inference

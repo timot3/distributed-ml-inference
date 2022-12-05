@@ -3,11 +3,13 @@ import random
 import socket
 import sys
 import os
+import threading
 
-from ML.messages import MLClientInferenceRequest
+from ML.messages import MLBatchResultMessage, MLClientInferenceRequest
 from ML.modeltypes import ModelType
 from Node.messages import FileMessage, MessageType
 from Node.nodetypes import VM1_URL
+from Node.utils import _recvall, get_message_from_bytes
 from run_filestore_client import send_message, make_file_message
 
 
@@ -86,6 +88,25 @@ def command_C5():
     print(job_vm_mapping)
 
 
+def run_ml_client_server():
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("localhost", 8081))
+        s.listen()
+        print("Listening on port", s.getsockname()[1])
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                print("Connected by", addr)
+                while True:
+                    data = _recvall(conn)
+                    if not data:
+                        break
+                    print("Received", data)
+                    # parse the data
+                    message = MLBatchResultMessage.deserialize(data)
+                    print(f"Prediction: {message.results}")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--local", action="store_true", help="Run the client locally")
@@ -110,6 +131,11 @@ if __name__ == "__main__":
 
     DIRECTORY_PREFIX = "ML/datasets/oxford_pets/"
 
+    # start a thread running the server
+    client_server = threading.Thread(target=run_ml_client_server)
+    client_server.daemon = False
+    client_server.start()
+
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
     first_10_files = random.sample(os.listdir(DIRECTORY_PREFIX), args.num_files)
     for file_name in first_10_files:
@@ -130,3 +156,6 @@ if __name__ == "__main__":
         print(file_names)
         ml_message = make_ml_classification_message(file_names, HOST, PORT)
         response = send_message(HOST, PORT, ml_message, recv=False)
+
+    # wait for the server to finish
+    client_server.join()

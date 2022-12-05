@@ -135,7 +135,7 @@ def set_batch_size(node, model_type, value):
     pass
 
 
-def get_query_rate_sd(node, model_type):
+def get_query_rate(node, model_type):
     # queries/s over the past 10s
     # return (rate, sd)
     pass
@@ -143,12 +143,29 @@ def get_query_rate_sd(node, model_type):
 
 def get_queries_processed(node, model_type):
     # Total queries for a job
-    pass
+    try:
+        model_type = int(model_type)
+        modeltype = ModelType(model_type)
+    except ValueError:
+        print("Invalid model type")
+        return
+
+    print(f"Queries processed for {modeltype.name}: {node.queries_processed[model_type]}")
+    return node.load_balancer.query_counts_by_model[model_type]
 
 
 def get_vm_job_mapping(node) -> dict:
     # Return a dict of str(VMID) : str(model_type) value
-    pass
+    if not node.is_introducer:
+        return
+
+    vm_job_mapping = node.load_balancer.get_vm_job_mapping()
+
+    res = ""
+    for vm_id, model_type in vm_job_mapping.items():
+        res += f"VMID: {vm_id}, Model Type: {model_type}\n"
+
+    print(res)
 
 
 def command_C1(node, model_type):
@@ -157,14 +174,17 @@ def command_C1(node, model_type):
 
     try:
         model_type = int(model_type)
-        modeltype = ModelType(model_type)
+        model_type = ModelType(model_type)
     except ValueError:
         print("Invalid model type")
         return
 
-    rate, sd = get_query_rate_sd(node, model_type)
-    processed = get_queries_processed()
-    pass
+    rate = node.load_balancer.get_query_rate()
+    processed = node.load_balancer.total_query_count
+
+    print(
+        f"Query rate for {model_type.name}: {rate}. Total queries processed: {processed}"
+    )
 
 
 def command_C2(node, model_type):
@@ -172,12 +192,24 @@ def command_C2(node, model_type):
     # Also consider doing percentiles. This shouldn't be too bad since
     # we will sort the rates, and our data set for processing times
     # shouldn't be too big?
-    pass
+    if not node.is_introducer:
+        return
+
+    try:
+        model_type = int(model_type)
+        modeltype = ModelType(model_type)
+    except ValueError:
+        print("Invalid model type")
+        return
+
+    print(
+        f"Average processing time for {model_type}: {node.load_balancer.get_query_rate_model(model_type)}"
+    )
 
 
 def command_C3(node, model_type, value):
     # Set batch size of model for all nodes
-    pass
+    print("NOT IMPLEMENTED. HARDCODED")
 
 
 def set_batch_size(node, model_type, value):
@@ -193,6 +225,11 @@ def _get_command_option() -> Tuple[int, List[str]]:
     5 -> ls all: list files in the filestore
     6 -> ls <file>: list specific files in filestore
     7 -> store: List the files currently stored in this node's filestore
+    ======ML COMMANDS (COORDINATOR ONLY)=========
+    MODEL TYPES: 1=RESNET, 2=ALEXNET
+    8 -> C1 <model type>: Current (over the past 10 seconds) query rate
+    9 -> C2: Average and standard deviation of processing times
+    10 -> C3: Set batch size of model for all nodes
     """
     # unindent the commands using textwrap
     commands = textwrap.dedent(commands)
@@ -245,6 +282,29 @@ def _handle_command(node, command):
         file_store = node.get_file_store()
         filenames = file_store.get_file_names()
         print(bcolors.OKBLUE + ",".join(filenames) + bcolors.ENDC)
+
+    elif command_num == 8:
+        # C1 <model type>: Current (over the past 10 seconds) query rate
+        if len(command) < 1:
+            print("Missing model type")
+            return
+
+        print(command)
+        command_C1(node, command[1][0])
+
+    elif command_num == 9:
+        # C2: Average and standard deviation of processing times
+        if len(command) < 1:
+            print("Missing model type")
+            return
+        command_C2(node, command[1])
+
+    elif command_num == 10:
+        # C3: Set batch size of model for all nodes
+        if len(command) < 1:
+            print("Missing model type or batch size")
+            return
+        command_C3(node, command[1], command[2])
 
     else:
         print("Invalid command")

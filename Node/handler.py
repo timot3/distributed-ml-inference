@@ -26,6 +26,7 @@ import random
 from threading import Lock
 
 from FileStore.FileStore import File
+from ML.messages import MLClientInferenceResponse
 from Node.messages import (
     FileMessage,
     FileReplicationMessage,
@@ -567,8 +568,20 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         elif message.message_type == MessageType.BATCH_COMPLETE:
             print(f"Batch {message.batch_id} complete. Prediction: {message.results}")
-            # This is received by the coordinator
-            # Mark the batch as completed, other bookkeeping.
+            self.server.load_balancer.complete_batch(message.batch_id, message.results)
+            # send back to client
+            # make MLClientInferenceResponse message
+            response = MLClientInferenceResponse(
+                self.server.host,
+                self.server.port,
+                self.server.timestamp,
+                message.model_type,
+                message.file_names,
+                message.results,
+            )
+
+            client_member = Member(self.server.client_ip, self.server.client_port, 0)
+            self.server._send(response, client_member)
 
         elif message.message_type == MessageType.BATCH_FAILED:
             # requeue the batch
@@ -587,6 +600,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         elif message.message_type == MessageType.CLIENT_INFERERNCE_REQUEST:
             self.server._process_client_inference_request(message)
+            self.server.inference_started = True
 
         elif message.message_type == MessageType.CLIENT_INFERERNCE_RESPONSE:
             raise NotImplementedError

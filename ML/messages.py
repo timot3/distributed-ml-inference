@@ -127,7 +127,6 @@ class MLClientInferenceResponse(MLMessage):
 
     def __init__(
         self,
-        message_type: MessageType,
         ip: str,
         port: int,
         timestamp: int,
@@ -153,6 +152,7 @@ class MLClientInferenceResponse(MLMessage):
             self.model_type.value,
         )
         print(self.results)
+        print(self.files)
         files = ";".join(self.files)
         results = ";".join(self.results)
         return (
@@ -290,7 +290,6 @@ class MLBatchResultMessage(MLMessage):
 
     def serialize(self) -> bytes:
         file_names = ";".join(self.file_names)
-        print(self.results)
         results = ";".join(self.results)
         return (
             super().serialize()
