@@ -15,6 +15,64 @@ def make_ml_classification_message(file_names, host, port):
 
     return MLClientInferenceRequest(host, port, 0, ModelType.UNSPECIFIED, file_names)
 
+def infer_model(model_type, num_batches):
+    # Start an inference job on a model
+    pass
+
+def set_batch_size(model_type, value):
+    # There is a batch size that is set only at the 
+    # start before any jobs are started.
+    pass
+
+def get_query_rate_sd(model_type):
+    # queries/s over the past 10s
+    # return (rate, sd)
+    pass
+
+def get_queries_processed(model_type):
+    # Total queries for a job
+    pass
+
+def get_vm_job_mapping() -> dict:
+    # Return a dict of str(VMID) : str(model_type) value
+    pass
+
+def command_C1(model_type):
+    # Current (over the past 10 seconds) query rate
+    # Running count of queries since the beginning
+    rate, sd = get_query_rate_sd()
+    processed = get_queries_processed()
+    pass
+
+def command_C2(model_type):
+    # Average and standard deviation of processing times
+    # Also consider doing percentiles. This shouldn't be too bad since 
+    # we will sort the rates, and our data set for processing times 
+    # shouldn't be too big?
+    pass
+
+def command_C3(model_type, value):
+    # Set batch size of model for all nodes
+    set_batch_size(model_type, value)
+    pass
+
+"""
+This command exists to display the results of inference.
+Right now, we do not need it since we print our results 
+out to terminal.
+def command_C4():
+    pass
+
+"""
+
+def command_C5():
+    # This prints out the VM -> job mapping.
+    # We can do a job -> VM mapping and then swap the relationship
+    # between key and value
+    vm_job_mapping = get_vm_job_mapping()
+    job_vm_mapping = {v : k for k, v in vm_job_mapping} 
+    print(job_vm_mapping)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
