@@ -1,6 +1,6 @@
 import asyncio
 from typing import TYPE_CHECKING, Optional, Any, Coroutine
-from Node.LoadBalancer.Batch import Batch
+from Node.LoadBalancer.Batch import Batch, BatchResult
 from Node.nodetypes import Member, MembershipList
 
 if TYPE_CHECKING:
@@ -16,6 +16,7 @@ class Scheduler:
         self.node = node
 
     def schedule(self, batch):
+        print("Scheduling batch")
         self.batches.put_nowait(batch)
 
     def schedule_on(self, node: Member, batch: Batch):
@@ -27,13 +28,12 @@ class Scheduler:
         """Get the next batch in the queue"""
         if self.batches.qsize() == 0:
             return None
-        return self.batches.get()
+        return await self.batches.get()
 
-    async def dispatch(self):
+    async def dispatch(self, batch: Batch):
         """Dispatch a batch to a node"""
         # get the next batch, and send the batch to the node
         # if there are no batchs, return
-        batch = self.pop_next_batch()
         if batch is None:
             # no batchs to dispatch
             return
@@ -45,3 +45,21 @@ class Scheduler:
             self.schedule(batch)
 
         return results
+
+    async def run(self):
+        """Run the scheduler"""
+        while True:
+            await asyncio.sleep(0.2)
+            print("Scheduler running")
+            batch = await self.pop_next_batch()
+            if batch is None:
+                continue
+
+            elif type(batch) is Batch:
+                await self.dispatch(batch)
+
+            elif type(batch) is BatchResult:
+                # send response to client
+                print(f"GOT BATCH RESULT: {batch.results}")
+
+            print(type(batch))

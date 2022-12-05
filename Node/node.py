@@ -1,3 +1,4 @@
+import asyncio
 import concurrent.futures
 import logging
 import socketserver
@@ -12,7 +13,9 @@ from typing import Any, List, Optional, Tuple, Dict
 import random
 
 from FileStore.FileStore import File, FileStore
+from ML.messages import MLClientInferenceResponse
 from ML.models import ClassifierModel, DummyModel, ModelCollection
+from ML.modeltypes import ModelType
 from Node.handler import NodeHandler
 from Node.messages import (
     FileReplicationMessage,
@@ -22,6 +25,7 @@ from Node.messages import (
     MessageType,
     FileMessage,
 )
+from .LoadBalancer.Batch import Batch
 from .LoadBalancer.LoadBalancer import LoadBalancer
 from .LoadBalancer.Scheduler import Scheduler
 from .nodetypes import (
@@ -294,6 +298,28 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         thread.start()
         return thread
 
+    async def _run_scheduler(self, SCHEDULER_TIMEOUT=0.5):
+        """
+        This method runs the scheduler
+        :return: Never returns
+        """
+        scheduler_task = asyncio.create_task(self.scheduler.run())
+        await asyncio.gather(scheduler_task)
+
+    def _start_scheduler_async(self):
+        asyncio.run(self._run_scheduler())
+
+    def start_scheduler(self):
+        """
+        This method starts the scheduler thread
+        :return: the thread object
+        """
+        print("Starting scheduler")
+        self.logger.info("Starting scheduler")
+        thread = threading.Thread(target=self._start_scheduler_async, daemon=True)
+        thread.start()
+        return thread
+
     def get_neighbors(self) -> List[Member]:
         # return a list of neighbors
         # treat neighbors as a circular list
@@ -364,7 +390,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
                 executor.submit(self._send, message, neighbor, recv=recv): neighbor
                 for neighbor in members
             }
-            # for future in concurrent.futures.as_completed(future_to_member, timeout=HEARTBEAT_WATCHDOG_TIMEOUT):
             for future in concurrent.futures.as_completed(future_to_member):
                 member = future_to_member[future]
                 try:
@@ -576,3 +601,15 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             except:
                 print("Exception when trying to contact DNS Daemon, trying again")
         return alleged_introducer_ip
+
+    def _process_client_inference_request(self, message):
+        """Schedule a task to process the inference request
+
+        Args:
+            message (MLClientInferenceRequest): The inference request message
+        """
+        batch = Batch(
+            ModelType(message.model_type),
+            message.files,
+        )
+        self.scheduler.schedule(batch)

@@ -26,11 +26,15 @@ class LoadBalancer:
 
         model_loads = {}
         for model in ModelType:
+            if model == ModelType.UNSPECIFIED:
+                continue
             model_loads[model] = self.node.membership_list.get_model_load(model)
 
         # print the difference between the models' loads, in percent
         print("Model loads:")
         for model in ModelType:
+            if model == ModelType.UNSPECIFIED:
+                continue
             print(f"{model.name}: {model_loads[model]}")
 
         # get the model with the least load
@@ -71,10 +75,8 @@ class LoadBalancer:
         :param batch: The job to dispatch
         :return: The result of the batch
         """
-
+        batch.schedule(node)
         # dispatch the job to the node
-        broadcast_result = self.node.broadcast_to(
-            batch.get_job_message(), [node], recv=True
-        )
+        broadcast_result = self.node.broadcast_to(batch.get_job_message(), [node])
         result = broadcast_result[node]
         return BatchResult(batch, result)

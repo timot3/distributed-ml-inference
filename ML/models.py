@@ -48,7 +48,7 @@ class MLModel:
             raise ToDoException
     """
 
-    def _load(self):
+    def _load(self, model_pkl_path: str):
         raise NotImplementedError
 
     def train(self):
@@ -196,6 +196,10 @@ class ModelCollection:
             # Currently, read or send get to coordinator
             # TODO: Account for failure
             received_data = self.server.broadcast_to(msg, [introducer_member], recv=True)
+            # save the image to a temp file
+            with open("ML/temp.jpg", "wb") as temp_file:
+                temp_file.write(received_data[introducer_member].data)
+
             img_fastai = PILImage.create(received_data[introducer_member].data)
             file_list.append(img_fastai)
 

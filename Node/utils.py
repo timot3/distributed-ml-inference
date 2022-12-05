@@ -5,7 +5,13 @@ import textwrap
 import time
 from typing import Optional, Tuple, Union, List
 
-from ML.messages import MLBatchScheduleMessage, MLBatchSizeMessage, MLBatchResultMessage
+from ML.messages import (
+    MLBatchScheduleMessage,
+    MLBatchSizeMessage,
+    MLBatchResultMessage,
+    MLClientInferenceRequest,
+    MLClientInferenceResponse,
+)
 from Node.messages import (
     Message,
     FileMessage,
@@ -261,7 +267,7 @@ def is_fileversion_message(message_type: int) -> bool:
 
 
 def is_ml_schedule_batch_message(message_type: int) -> bool:
-    return message_type == MessageType.ML_SCHEDULE_BATCH
+    return message_type == MessageType.SCHEDULE_BATCH
 
 
 def is_ml_batch_size_message(message_type: int) -> bool:
@@ -270,6 +276,14 @@ def is_ml_batch_size_message(message_type: int) -> bool:
 
 def is_ml_batch_result_message(message_type: int) -> bool:
     return message_type == MessageType.BATCH_COMPLETE
+
+
+def is_ml_client_request_message(message_type: int) -> bool:
+    return message_type == MessageType.CLIENT_INFERERNCE_REQUEST
+
+
+def is_ml_client_response_message(message_type: int) -> bool:
+    return message_type == MessageType.CLIENT_INFERERNCE_RESPONSE
 
 
 def get_message_from_bytes(data: Union[bytes, bytearray]) -> Message:
@@ -318,6 +332,12 @@ def get_message_from_bytes(data: Union[bytes, bytearray]) -> Message:
 
     elif is_ml_batch_result_message(message_type):
         return MLBatchResultMessage.deserialize(data)
+
+    elif is_ml_client_request_message(message_type):
+        return MLClientInferenceRequest.deserialize(data)
+
+    elif is_ml_client_response_message(message_type):
+        return MLClientInferenceResponse.deserialize(data)
 
     else:
         raise ValueError(f"Invalid message type {message_type}")

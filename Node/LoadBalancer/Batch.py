@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 def get_job_id_hash(files: List[str]) -> int:
     """Get a hash of the job id"""
-    return hash("".join(files))
+    return abs(hash("".join(files)))
 
 
 class Batch:
@@ -49,14 +49,14 @@ class Batch:
     def is_complete(self) -> bool:
         return self.result is not None
 
-    def get_job_message(self) -> "MLMessage":
-        from ML.messages import MLMessage
+    def get_job_message(self) -> "MLBatchScheduleMessage":
+        from ML.messages import MLBatchScheduleMessage
 
         ip = self.node_scheduled_on.ip
         port = self.node_scheduled_on.port
         timestamp = self.node_scheduled_on.timestamp
-        msg = MLMessage(
-            MessageType.QUERY_MODEL, ip, port, timestamp, 0, self.model_type, 0, 1
+        msg = MLBatchScheduleMessage(
+            ip, port, timestamp, self.model_type, self.id, self.files
         )
         return msg
 

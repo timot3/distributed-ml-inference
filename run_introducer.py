@@ -45,6 +45,9 @@ if __name__ == "__main__":
         thread = threading.Thread(target=introducer.serve_forever, daemon=True)
         thread.start()
 
+        scheduler = threading.Thread(target=introducer.start_scheduler, daemon=True)
+        scheduler.start()
+
         print(in_green(f"Node running on {HOST}:{PORT}"))
 
         run_node_command_menu(introducer)

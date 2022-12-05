@@ -556,7 +556,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
 
         elif message.message_type == MessageType.SCHEDULE_BATCH:
             self.server.model_collection.insert_batch(
-                message.model_type, message.batch_id, message.file_list
+                message.model_type, message.batch_id, message.file_names
             )
             raise NotImplementedError
 
@@ -573,6 +573,12 @@ class NodeHandler(socketserver.BaseRequestHandler):
             # Clear everything. If we do not have a queue, remove all
             # code related to this.
             # Right now, all in node == 1 batch, so this is entirely unnecessary
+
+        elif message.message_type == MessageType.CLIENT_INFERERNCE_REQUEST:
+            self.server._process_client_inference_request(message)
+
+        elif message.message_type == MessageType.CLIENT_INFERERNCE_RESPONSE:
+            raise NotImplementedError
 
         else:
             raise ValueError("Unknown message type! Received Message: ".format(message))

@@ -72,7 +72,7 @@ def make_file_version_message(
     )
 
 
-def send_file_message(ip, port, file_message: Message, recv=True):
+def send_message(ip, port, file_message: Message, recv=True):
     """
     Sends a filestore message to the ip and port
     :param ip: the ip to send the message to
@@ -119,7 +119,7 @@ def get_filestore_command(host, port, command=None):
             file_data, command[2], MessageType.PUT, host, port
         )
 
-        response = send_file_message(host, port, command_message)
+        response = send_message(host, port, command_message)
         print(response)
 
     elif command[0] == "get":
@@ -127,7 +127,7 @@ def get_filestore_command(host, port, command=None):
         command_message = make_file_version_message(
             command[1], MessageType.GET, host, port
         )
-        response = send_file_message(host, port, command_message)
+        response = send_message(host, port, command_message)
         print(response)
 
         with open(command[2], "wb") as f:
@@ -138,7 +138,7 @@ def get_filestore_command(host, port, command=None):
         command_message = make_file_message(
             b"", command[1], MessageType.DELETE, host, port
         )
-        send_file_message(host, port, command_message, recv=False)
+        send_message(host, port, command_message, recv=False)
         print("Done")
 
     else:
@@ -157,7 +157,7 @@ def test_25_mb(host, port):
     )
     # time the next section
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
 
     print("INSERT TIME (s): \t\t", end - start)
@@ -165,7 +165,7 @@ def test_25_mb(host, port):
     # read
     command_message = make_file_version_message("25mb.txt", MessageType.GET, host, port)
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
     print("READ TIME (s): \t\t", end - start)
 
@@ -174,7 +174,7 @@ def test_25_mb(host, port):
         file_data, "25mb.txt", MessageType.PUT, host, port
     )
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
     print("DELETE TIME (s): \t\t", end - start)
 
@@ -191,7 +191,7 @@ def test_500_mb(host, port):
     )
     # time the next section
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
 
     print("INSERT TIME (s): \t\t", end - start)
@@ -199,7 +199,7 @@ def test_500_mb(host, port):
     # read
     command_message = make_file_version_message("500mb.txt", MessageType.GET, host, port)
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
     print("READ TIME (s): \t\t", end - start)
 
@@ -208,7 +208,7 @@ def test_500_mb(host, port):
         file_data, "500mb.txt", MessageType.PUT, host, port
     )
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
     print("UPDATE TIME (s): \t\t", end - start)
 
@@ -223,7 +223,7 @@ def test_40_mb(host, port):
     )
 
     # send the message
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     print(response)
 
 
@@ -237,7 +237,7 @@ def test_1_gb(host, port):
     # send the message
     # time the next section
     start = time.time()
-    response = send_file_message(host, port, command_message)
+    response = send_message(host, port, command_message)
     end = time.time()
     print("INSERT TIME (s): \t\t", end - start)
     print(response)

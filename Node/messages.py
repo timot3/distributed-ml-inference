@@ -44,6 +44,9 @@ class MessageType(IntEnum):
     INVALIDATE_BATCH = 27  # Coordinator to node
     INVALIDATE_ALL_IN_NODE = 28  # Coordinator to node
 
+    CLIENT_INFERERNCE_REQUEST = 29
+    CLIENT_INFERERNCE_RESPONSE = 30
+
 
 # join message has the following fields:
 # 4 byte for message type
@@ -122,7 +125,7 @@ class Message:
         )
 
     def __hash__(self):
-        return hash((self.message_type, self.ip, self.port, self.timestamp))
+        return abs(hash((self.message_type, self.ip, self.port, self.timestamp)))
 
 
 class FileMessage(Message):
@@ -150,7 +153,6 @@ class FileMessage(Message):
         # pack the filename into a 32 byte string using struct.pack
         file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
 
-        print("version", self.version)
         # pack the version into a 4 byte int using struct.pack
 
         version = struct.pack(">i", self.version)

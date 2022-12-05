@@ -99,9 +99,10 @@ class Member:
         self.active_queries = List[int]
 
         # load representation
-        self.loads = {}
-        for model_type in range(NUM_JOBS):
-            self.loads[ModelType(model_type)] = LoadRepresentation(ModelType(model_type))
+        self.loads = {
+            ModelType.RESNET: LoadRepresentation(ModelType.RESNET),
+            ModelType.ALEXNET: LoadRepresentation(ModelType.ALEXNET),
+        }
 
         if last_heartbeat == 0:
             self.last_heartbeat = timestamp
@@ -143,15 +144,12 @@ class Member:
         Returns:
             ModelType: The model type that is least loaded on this machine
         """
-        least_loaded_model = ModelType(0)
-        least_load = self.loads[least_loaded_model].get_load()
-        for model_type in range(1, NUM_JOBS):
-            model_type = ModelType(model_type)
-            load = self.loads[model_type].get_load()
-            if load < least_load:
-                least_loaded_model = model_type
-                least_load = load
-        return least_loaded_model
+        if (
+            self.loads[ModelType.RESNET].get_load()
+            < self.loads[ModelType.ALEXNET].get_load()
+        ):
+            return ModelType.RESNET
+        return ModelType.ALEXNET
 
     def get_total_load(self):
         return sum(load.get_load() for load in self.loads.values())

@@ -63,7 +63,7 @@ class MLMessage(Message):
     def serialize(self) -> bytes:
         return ml_struct.pack(
             self.message_type.value,
-            self.ip,
+            self.ip.encode("utf-8"),
             self.port,
             self.timestamp,
             self.model_type.value,
@@ -78,6 +78,103 @@ class MLMessage(Message):
             port,
             timestamp,
             ModelType(model_type),
+        )
+
+
+class MLClientInferenceRequest(MLMessage):
+    """Same as ML message, comes from the client, has an additional field called "files"
+    which is a list of the files to do inference on
+    """
+
+    def __init__(
+        self, ip: str, port: int, timestamp: int, model_type: ModelType, files: List[str]
+    ):
+        super().__init__(
+            MessageType.CLIENT_INFERERNCE_REQUEST, ip, port, timestamp, model_type
+        )
+        self.files = files
+
+    def __str__(self):
+        return f"{super().__str__()} files={self.files}"
+
+    def serialize(self) -> bytes:
+        base_ml_message = ml_struct.pack(
+            self.message_type.value,
+            self.ip.encode(),
+            self.port,
+            self.timestamp,
+            self.model_type.value,
+        )
+        files = ";".join(self.files)
+        return base_ml_message + files.encode("utf-8")
+
+    @classmethod
+    def deserialize(cls, data: Union[bytes, bytearray]) -> "MLMessage":
+        print(data)
+        print(len(data))
+        message_type, ip, port, timestamp, model_type = ml_struct.unpack(
+            data[: ml_struct.size]
+        )
+        files = data[ml_struct.size :].decode("utf-8").split(";")
+        return cls(ip, port, timestamp, ModelType(model_type), files)
+
+
+class MLClientInferenceResponse(MLMessage):
+    """Same as ML message, comes from the client, has an additional field called "files"
+    which is a list of the files to do inference on
+    and an additioanl field called "results" which is a list of the results of the inference
+    """
+
+    def __init__(
+        self,
+        message_type: MessageType,
+        ip: str,
+        port: int,
+        timestamp: int,
+        model_type: ModelType,
+        files: List[str],
+        results: List[str],
+    ):
+        super().__init__(
+            MessageType.CLIENT_INFERERNCE_RESPONSE, ip, port, timestamp, model_type
+        )
+        self.files = files
+        self.results = results
+
+    def __str__(self):
+        return f"{super().__str__()} files={self.files}"
+
+    def serialize(self) -> bytes:
+        base_ml_message = ml_struct.pack(
+            self.message_type.value,
+            self.ip.encode("utf-8"),
+            self.port,
+            self.timestamp,
+            self.model_type.value,
+        )
+        files = ";".join(self.files)
+        results = ";".join(self.results)
+        return (
+            base_ml_message
+            + files.encode("utf-8")
+            + ":::".encode("utf-8")
+            + results.encode("utf-8")
+        )
+
+    @classmethod
+    def deserialize(cls, data: Union[bytes, bytearray]) -> "MLMessage":
+        message_type, ip, port, timestamp, model_type = ml_struct.unpack(data)
+        files_and_results = data[ml_struct.size :].decode("utf-8").split(":::")
+        files = files_and_results[0].split(";")
+        results = files_and_results[1].split(";")
+        return cls(
+            MessageType(message_type),
+            ip,
+            port,
+            timestamp,
+            ModelType(model_type),
+            files,
+            results,
         )
 
 
@@ -155,15 +252,15 @@ class MLBatchScheduleMessage(MLMessage):
                 timestamp,
                 model_type,
                 batch_id,
-                file_names,
-            ) = ml_schedule_batch_struct.unpack(data)
+            ) = ml_schedule_batch_struct.unpack(data[: ml_schedule_batch_struct.size])
+            file_names = data[ml_schedule_batch_struct.size :].decode("utf-8").split(";")
             return cls(
                 ip,
                 port,
                 timestamp,
                 ModelType(model_type),
                 batch_id,
-                file_names.decode("utf-8").split(";"),
+                file_names,
             )
 
         except struct.error:
@@ -211,7 +308,7 @@ class MLBatchResultMessage(MLMessage):
                 timestamp,
                 model_type,
                 batch_id,
-            ) = ml_schedule_batch_struct.unpack(data)
+            ) = ml_schedule_batch_struct.unpack(data[: ml_schedule_batch_struct.size])
             file_names_results = data[ml_schedule_batch_struct.size :].split(b":::")
             file_names = file_names_results[0].decode("utf-8").split(";")
             results = file_names_results[1].decode("utf-8").split(";")
