@@ -151,8 +151,7 @@ class MLClientInferenceResponse(MLMessage):
             self.timestamp,
             self.model_type.value,
         )
-        print(self.results)
-        print(self.files)
+
         files = ";".join(self.files)
         results = ";".join(self.results)
         return (

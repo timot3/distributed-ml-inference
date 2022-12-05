@@ -121,7 +121,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     # if args.local:
-    if True:
+    if args.local:
         HOST, PORT = "127.0.0.1", 8080
         BACKUP_HOST, BACKUP_PORT = "127.0.0.1", 8081
     else:

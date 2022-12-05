@@ -20,6 +20,6 @@ do
     VMSTR="${VMSTRL}${i}${VMSTRR}"
     PYSTR="print(${VMSTR})"
     STR=$(echo "$PYSTR" | python3)
-    ssh -i ~/.ssh/cs425 $STR "echo \"PASSWORD\" | sudo -S yum install python39 -y"
-    ssh -i ~/.ssh/cs425 $STR "python3.9 -m pip install fastai" &
+    # ssh -i ~/.ssh/cs425 $STR "echo \"PASSWORD\" | sudo -S yum install python39 -y"
+    ssh -i ~/.ssh/cs425 $STR "python3.9 -m pip install fastcore fastai --upgrade" &
 done
