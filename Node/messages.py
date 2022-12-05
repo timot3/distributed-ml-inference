@@ -151,7 +151,6 @@ class FileMessage(Message):
         """
         base_message = super().serialize()
         # pack the filename into a 32 byte string using struct.pack
-        print(type(self.file_name))
         file_name = struct.pack(">32s", self.file_name.encode("utf-8"))
 
         # pack the version into a 4 byte int using struct.pack

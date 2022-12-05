@@ -38,9 +38,6 @@ if __name__ == "__main__":
 
         INTRODUCER_HOST, INTRODUCER_PORT = socket.gethostbyname(VM1_URL), 8080
 
-    # wait for the introducer to start
-    time.sleep(1)
-
     with NodeTCPServer(HOST, PORT, is_introducer=False) as node:
         node.allow_reuse_address = True
         node.server_bind()

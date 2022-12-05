@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING, List, Optional, Union
 
 if TYPE_CHECKING:
     from ML.messages import MLMessage
-
     from ML.modeltypes import ModelType
     from Node.messages import MessageType, Message
 

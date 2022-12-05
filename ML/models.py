@@ -15,7 +15,7 @@ from fastai.vision.all import *
 
 from ML.messages import get_file_get_msg, get_batch_complete_msg
 from ML.modeltypes import ModelType
-
+from Node.LoadBalancer.Batch import Batch
 
 if TYPE_CHECKING:
     from Node.node import NodeTCPServer
@@ -117,10 +117,8 @@ class ModelCollection:
 
         self.workDistThread = Thread()
         self.batch_lock = Lock()
-        self.current_batch_id = None
         self.current_image_list = None
-        self.current_file_list = None
-        self.current_model_type = None
+        self.current_batch = None
 
     def select_model(self, model: ModelType):
         if model == ModelType.RESNET:
@@ -129,14 +127,18 @@ class ModelCollection:
             return self.alexnet
 
     def infer(self):
+        time.sleep(3)
+        start = time.time()
         with self.batch_lock:
-            assert self.current_batch_id is not None
-            self.model = self.select_model(self.current_model_type)
+            assert self.current_batch is not None
+            self.model = self.select_model(self.current_batch.model_type)
             pred = []
             for img in self.current_image_list:
                 pred.append(self.model.predict(img))
                 print(f"Predicted: {pred[-1]}")
             self.successful_batch(pred)
+        end = time.time()
+        print(f"Time to infer: {end - start}")
 
     def insert_batch(self, model_type, batch_id, file_list):
         image_list = []
@@ -154,10 +156,8 @@ class ModelCollection:
             image_list.append(img_fastai)
 
         with self.batch_lock:
+            self.current_batch = Batch(model_type, file_list)
             self.current_image_list = image_list
-            self.current_batch_id = batch_id
-            self.current_model_type = model_type
-            self.current_file_list = file_list
 
     def successful_batch(self, predictions):
 
@@ -171,9 +171,9 @@ class ModelCollection:
         results = [x[0] for x in predictions]  # we only want the class name
         msg = get_batch_complete_msg(
             self.server,
-            self.current_model_type,
-            self.current_batch_id,
-            self.current_file_list,
+            self.current_batch.model_type,
+            self.current_batch.id,
+            self.current_batch.files,
             results,
         )
         # TODO: Inform scheduler

@@ -1,4 +1,5 @@
 import argparse
+import random
 import socket
 import sys
 import os
@@ -20,7 +21,10 @@ if __name__ == "__main__":
     parser.add_argument("--local", action="store_true", help="Run the client locally")
     parser.add_argument("--menu", action="store_true", help="Run the client in menu mode")
     parser.add_argument(
-        "--num-files", type=int, default=10, help="Number of files to test"
+        "--num-files", type=int, default=100, help="Number of files to test"
+    )
+    parser.add_argument(
+        "--num-batches", type=int, default=10, help="Number of batches to test"
     )
 
     args = parser.parse_args()
@@ -35,20 +39,21 @@ if __name__ == "__main__":
 
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
     first_10_files = os.listdir(DIRECTORY_PREFIX)[: args.num_files]
-    # for file_name in first_10_files:
-    #     if file_name.endswith(".jpg"):
-    #         # load the file into sdfs
-    #         with open(DIRECTORY_PREFIX + file_name, "rb") as f:
-    #             file_data = f.read()
-    #             file_message = make_file_message(
-    #                 file_data, file_name, MessageType.PUT, HOST, PORT
-    #             )
-    #             response = send_message(HOST, PORT, file_message)
+    for file_name in first_10_files:
+        if file_name.endswith(".jpg"):
+            # load the file into sdfs
+            with open(DIRECTORY_PREFIX + file_name, "rb") as f:
+                file_data = f.read()
+                file_message = make_file_message(
+                    file_data, file_name, MessageType.PUT, HOST, PORT
+                )
+                response = send_message(HOST, PORT, file_message)
 
     # inference
     # let's do inference on the first file in the directory
-    file_name = first_10_files[:8]
-    ml_message = make_ml_classification_message(file_name, HOST, PORT)
 
-    # send the message
-    response = send_message(HOST, PORT, ml_message)
+    for i in range(args.num_batches):
+        file_names = random.sample(first_10_files, 16)
+        print(file_names)
+        ml_message = make_ml_classification_message(file_names, HOST, PORT)
+        response = send_message(HOST, PORT, ml_message, recv=False)
