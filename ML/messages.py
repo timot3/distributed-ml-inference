@@ -1,4 +1,4 @@
-from typing import Union, List
+from typing import Optional, Union, List
 from ML.modeltypes import ModelType
 from Node.messages import MessageType, Message, FileMessage
 
@@ -313,7 +313,7 @@ class MLBatchResultMessage(MLMessage):
             file_names = file_names_results[0].decode("utf-8").split(";")
             results = file_names_results[1].decode("utf-8").split(";")
 
-            return cls(
+            res = cls(
                 ip,
                 port,
                 timestamp,
@@ -322,6 +322,8 @@ class MLBatchResultMessage(MLMessage):
                 file_names,
                 results,
             )
+            res.message_type = message_type
+            return res
 
         except struct.error:
             # print the length of the data and the data received
@@ -331,7 +333,9 @@ class MLBatchResultMessage(MLMessage):
             raise struct.error("Error deserializing MLBatchResultMessage")
 
 
-def get_batch_complete_msg(server, model_type, batch_id, file_names, results):
+def get_batch_complete_msg(
+    server, model_type, batch_id, file_names, results: Optional[List[str]] = None
+):
     msg = MLBatchResultMessage(
         server.host,
         server.port,
@@ -341,6 +345,10 @@ def get_batch_complete_msg(server, model_type, batch_id, file_names, results):
         file_names,
         results,
     )
+    if results == None:
+        results = [""] * len(file_names)
+        msg.message_type = MessageType.BATCH_FAILED
+
     return msg
 
 

@@ -39,21 +39,23 @@ if __name__ == "__main__":
 
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
     first_10_files = os.listdir(DIRECTORY_PREFIX)
-    # for file_name in first_10_files:
-    #     if file_name.endswith(".jpg"):
-    #         # load the file into sdfs
-    #         with open(DIRECTORY_PREFIX + file_name, "rb") as f:
-    #             file_data = f.read()
-    #             file_message = make_file_message(
-    #                 file_data, file_name, MessageType.PUT, HOST, PORT
-    #             )
-    #             response = send_message(HOST, PORT, file_message)
+    for file_name in first_10_files:
+        if file_name.endswith(".jpg"):
+            # load the file into sdfs
+            with open(DIRECTORY_PREFIX + file_name, "rb") as f:
+                file_data = f.read()
+                file_message = make_file_message(
+                    file_data, file_name, MessageType.PUT, HOST, PORT
+                )
+                response = send_message(HOST, PORT, file_message)
 
     # inference
-    # let's do inference on the first file in the directory
+    # let's do inference on the first file in the directory1
 
-    for i in range(args.num_batches):
-        file_names = random.sample(first_10_files, 16)
-        print(file_names)
-        ml_message = make_ml_classification_message(file_names, HOST, PORT)
-        response = send_message(HOST, PORT, ml_message, recv=False)
+    # for i in range(args.num_batches):
+    #     file_names = random.sample(first_10_files, 8)
+    #     print(file_names)
+    #     ml_message = make_ml_classification_message(file_names, HOST, PORT)
+    #     response = send_message(HOST, PORT, ml_message, recv=False)
+
+    start = time.time()

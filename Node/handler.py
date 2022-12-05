@@ -555,16 +555,15 @@ class NodeHandler(socketserver.BaseRequestHandler):
             model.set_batch_size(message.batch_size)
 
         elif message.message_type == MessageType.SCHEDULE_BATCH:
-            print("HERE")
             if self.server.is_introducer:
                 return
-            print(
-                f"Scheduling batch {message.batch_id} for model {message.model_type}. Files: {message.file_names}"
+            self.server.logger.info(
+                f"Scheduling batch {message.batch_id} for model {message.model_type}"
             )
+
             self.server.model_collection.insert_batch(
                 message.model_type, message.batch_id, message.file_names
             )
-            self.server.model_collection.infer()
 
         elif message.message_type == MessageType.BATCH_COMPLETE:
             print("Batch complete. Prediction: ", message.results)

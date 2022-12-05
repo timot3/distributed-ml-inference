@@ -123,26 +123,39 @@ class ModelCollection:
     def select_model(self, model: ModelType):
         if model == ModelType.RESNET:
             return self.resnet
-        else:
+        elif model == ModelType.ALEXNET:
             return self.alexnet
+        else:
+            return None
 
     def infer(self):
-        time.sleep(3)
         start = time.time()
-        with self.batch_lock:
-            assert self.current_batch is not None
-            self.model = self.select_model(self.current_batch.model_type)
-            pred = []
-            for img in self.current_image_list:
-                pred.append(self.model.predict(img))
-                print(f"Predicted: {pred[-1]}")
-            self.successful_batch(pred)
+        assert self.current_batch is not None
+        self.model = self.select_model(self.current_batch.model_type)
+        pred = []
+        for img in self.current_image_list:
+            pred.append(self.model.predict(img))
+            # print(f"Predicted: {pred[-1]}")
+        self.successful_batch(pred)
         end = time.time()
-        print(f"Time to infer: {end - start}")
+        # print(f"Time to infer: {end - start}")
 
     def insert_batch(self, model_type, batch_id, file_list):
+        successful_acquire = self.batch_lock.acquire(False)
+        if not successful_acquire:
+            # Send NACK to sender
+            msg = get_batch_complete_msg(
+                self.server,
+                self.current_batch.model_type,
+                self.current_batch.id,
+                self.current_batch.files,
+            )
+            introducer_member = self.server.membership_list[0]
+            self.server.broadcast_to(msg, [introducer_member])
+            return
+
         image_list = []
-        print(f"FILE_LIST: {file_list}")
+        # print(f"FILE_LIST: {file_list}")
         for f in file_list:
             # Load from SDFS
             msg = get_file_get_msg(self.server, f)
@@ -155,10 +168,12 @@ class ModelCollection:
             img_fastai = PILImage.create(received_data[introducer_member].data)
             image_list.append(img_fastai)
 
-        with self.batch_lock:
+            # with self.batch_lock:
             self.current_batch = Batch(model_type, file_list)
             self.current_image_list = image_list
             self.infer()
+
+        self.batch_lock.release()
 
     def successful_batch(self, predictions):
 
@@ -180,6 +195,7 @@ class ModelCollection:
         # TODO: Inform scheduler
         introducer_member = self.server.membership_list[0]
         self.server.broadcast_to(msg, [introducer_member])
+        # query_count_msg =
 
 
 class DummyModelCollection:

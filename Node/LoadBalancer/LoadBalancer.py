@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 from ML.modeltypes import ModelType
 from Node.LoadBalancer.Scheduler import Scheduler
 from Node.LoadBalancer.Batch import Batch, BatchResult
+from Node.messages import MessageType
 
 if TYPE_CHECKING:
     from Node.node import NodeTCPServer
@@ -78,7 +79,12 @@ class LoadBalancer:
         batch.schedule(node)
         # dispatch the job to the node
         print(f"Dispatching batch {batch.id} to node {node}")
-        broadcast_result = self.node.broadcast_to(batch.get_job_message(), [node])
+        broadcast_result = self.node.broadcast_to(
+            batch.get_job_message(), [node], recv=True
+        )
         result = broadcast_result[node]
+        if result is None or result.message_type == MessageType.BATCH_FAILED:
+            return None
         print(result)
+        # TODO: Increment the query count for result.model_type
         return BatchResult(batch, result)

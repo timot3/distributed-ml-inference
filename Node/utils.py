@@ -148,6 +148,7 @@ def _get_command_option() -> Tuple[int, List[str]]:
 
 def _handle_command(node, command):
     # the first number in the command is the command number
+    start = time.time()
     if len(command) == 0:
         print("Invalid command")
         return
@@ -178,6 +179,8 @@ def _handle_command(node, command):
 
     else:
         print("Invalid command")
+    end = time.time()
+    print(f"Command took {end - start} seconds")
 
 
 def run_node_command_menu(node):
@@ -275,7 +278,10 @@ def is_ml_batch_size_message(message_type: int) -> bool:
 
 
 def is_ml_batch_result_message(message_type: int) -> bool:
-    return message_type == MessageType.BATCH_COMPLETE
+    return (
+        message_type == MessageType.BATCH_COMPLETE
+        or message_type == MessageType.BATCH_FAILED
+    )
 
 
 def is_ml_client_request_message(message_type: int) -> bool:

@@ -61,7 +61,7 @@ class Batch:
 
 
 class BatchResult:
-    def __init__(self, batch: Batch, result: "Message"):
+    def __init__(self, batch: Batch, result: Optional["Message"]):
         self.job = batch
         self.id = batch.id
         self.files = batch.files

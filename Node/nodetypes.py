@@ -5,6 +5,7 @@ These classes are used to serialize and deserialize messages.
 It also contains useful magic number variables.
 """
 
+import random
 import socket
 import struct
 import time
@@ -319,14 +320,17 @@ class MembershipList(list):
         return res
 
     def get_least_loaded_member(self):
-        least_loaded_member = None
+        least_loaded_members = []
         least_load = float("inf")
+        least_loaded_member = None
+
         for member in self:  # type: Member
             load = member.get_total_load()
-            if load < least_load:
+            if load <= least_load:
                 least_loaded_member = member
                 least_load = load
-        return least_loaded_member
+                least_loaded_members.append(member)
+        return random.choice(least_loaded_members)
 
     def get_model_load(self, model_type: ModelType):
         load = 0
@@ -335,12 +339,9 @@ class MembershipList(list):
         return load
 
     def get_least_loaded_node_for_model(self, model_type) -> Member:
-        least_loaded_member = None
-        least_load = float("inf")
+        least_loaded_members = []
+        least_load = min(self, key=lambda m: m.get_load(model_type))
         for i in range(1, len(self)):  # type: Member
-            member = self[i]
-            load = member.get_load(model_type)
-            if load < least_load:
-                least_loaded_member = member
-                least_load = load
-        return least_loaded_member
+            if self[i].get_load(model_type) == least_load.get_load(model_type):
+                least_loaded_members.append(self[i])
+        return random.choice(least_loaded_members)

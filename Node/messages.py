@@ -47,6 +47,8 @@ class MessageType(IntEnum):
     CLIENT_INFERERNCE_REQUEST = 29
     CLIENT_INFERERNCE_RESPONSE = 30
 
+    BATCH_FAILED = 31  # Node to coordinator
+
 
 # join message has the following fields:
 # 4 byte for message type
