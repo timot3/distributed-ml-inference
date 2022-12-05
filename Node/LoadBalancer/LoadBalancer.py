@@ -103,9 +103,7 @@ class LoadBalancer:
         if not result:
             print(f"Batch {batch.id} failed on node {node}")
             return None
-        # print(result)
 
-        # update the query counts
         batch_size = self.node.model_collection.get_batch_size(batch.model_type)
         self.total_query_count += batch_size
         self.query_counts_by_model[batch.model_type] += batch_size
