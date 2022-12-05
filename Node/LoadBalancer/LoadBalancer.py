@@ -71,7 +71,7 @@ class LoadBalancer:
             best_model = self.get_best_model()
             batch.model_type = best_model
 
-            print("Best model:", best_model)
+            # print("Best model:", best_model)
             return await self.dispatch_to_model(best_model, batch)
 
     async def dispatch_to_model(self, model_type: ModelType, batch: Batch) -> BatchResult:
@@ -106,7 +106,7 @@ class LoadBalancer:
         # dispatch the job to the node
 
         if self.node.is_introducer:
-            print(f"Dispatching batch {batch.id} to node {node}")
+            # print(f"Dispatching batch {batch.id} to node {node}")
             broadcast_result = self.node.broadcast_to(
                 batch.get_job_message(), [node], recv=False
             )

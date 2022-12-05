@@ -116,7 +116,7 @@ if __name__ == "__main__":
         "--num-batches", type=int, default=100, help="Number of batches to test"
     )
     parser.add_argument(
-        "--batch-size", type=int, default=4, help="Number of files per batch"
+        "--batch-size", type=int, default=8, help="Number of files per batch"
     )
 
     args = parser.parse_args()

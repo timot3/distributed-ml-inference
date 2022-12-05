@@ -567,7 +567,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
             )
 
         elif message.message_type == MessageType.BATCH_COMPLETE:
-            print(f"Batch {message.batch_id} complete. Prediction: {message.results}")
+            self.server.logger.debug(f"Batch {message.batch_id} complete. Prediction: {message.results}")
             self.server.load_balancer.complete_batch(message.batch_id, message.results)
             # send back to client
             # make MLClientInferenceResponse message

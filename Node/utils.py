@@ -194,16 +194,14 @@ def command_C2(node, model_type):
     # shouldn't be too big?
     if not node.is_introducer:
         return
-
     try:
-        model_type = int(model_type)
-        modeltype = ModelType(model_type)
-    except ValueError:
+        modeltype = ModelType(int(model_type[0]))
+    except Exception as e:
         print("Invalid model type")
         return
 
     print(
-        f"Average processing time for {model_type}: {node.load_balancer.get_query_rate_model(model_type)}"
+        f"Average processing time for {modeltype.name}: {node.load_balancer.get_query_rate_model(modeltype)}"
     )
 
 
@@ -285,7 +283,7 @@ def _handle_command(node, command):
 
     elif command_num == 8:
         # C1 <model type>: Current (over the past 10 seconds) query rate
-        if len(command) < 1:
+        if len(command) < 1 or len(command[1]) == 0:
             print("Missing model type")
             return
 
