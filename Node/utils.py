@@ -12,6 +12,7 @@ from ML.messages import (
     MLClientInferenceRequest,
     MLClientInferenceResponse,
 )
+from ML.modeltypes import ModelType
 from Node.messages import (
     Message,
     FileMessage,
@@ -113,6 +114,66 @@ def get_any_open_port() -> int:
         port = sock.getsockname()[1]
 
     return port
+
+
+def infer_model(node, model_type, num_batches):
+    # Start an inference job on a model
+    pass
+
+
+def set_batch_size(node, model_type, value):
+    # There is a batch size that is set only at the
+    # start before any jobs are started.
+    pass
+
+
+def get_query_rate_sd(node, model_type):
+    # queries/s over the past 10s
+    # return (rate, sd)
+    pass
+
+
+def get_queries_processed(node, model_type):
+    # Total queries for a job
+    pass
+
+
+def get_vm_job_mapping(node) -> dict:
+    # Return a dict of str(VMID) : str(model_type) value
+    pass
+
+
+def command_C1(node, model_type):
+    # Current (over the past 10 seconds) query rate
+    # Running count of queries since the beginning
+
+    try:
+        model_type = int(model_type)
+        modeltype = ModelType(model_type)
+    except ValueError:
+        print("Invalid model type")
+        return
+
+    rate, sd = get_query_rate_sd(node, model_type)
+    processed = get_queries_processed()
+    pass
+
+
+def command_C2(node, model_type):
+    # Average and standard deviation of processing times
+    # Also consider doing percentiles. This shouldn't be too bad since
+    # we will sort the rates, and our data set for processing times
+    # shouldn't be too big?
+    pass
+
+
+def command_C3(node, model_type, value):
+    # Set batch size of model for all nodes
+    pass
+
+
+def set_batch_size(node, model_type, value):
+    pass
 
 
 def _get_command_option() -> Tuple[int, List[str]]:

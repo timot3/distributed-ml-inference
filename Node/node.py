@@ -613,3 +613,6 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             message.files,
         )
         self.scheduler.schedule(batch)
+
+    def print_query_rate_sd(self):
+        return self.scheduler.get_query_rate()

@@ -61,3 +61,7 @@ class Scheduler:
             elif type(batch) is BatchResult:
                 # send response to client
                 print(f"GOT BATCH RESULT: {batch.results}")
+
+    def get_query_rate(self) -> float:
+        """Get the query rate of the scheduler"""
+        return self.node.load_balancer.get_query_rate()
