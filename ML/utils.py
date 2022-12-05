@@ -11,7 +11,3 @@
 #         batch_tfms=[*aug_transforms(size=224, min_scale=0.75), Normalize.from_stats(*imagenet_stats)])
 
 #     return dls
-
-
-def load_learner(model_pkl_path: str):
-    pass

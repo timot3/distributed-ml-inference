@@ -35,20 +35,20 @@ if __name__ == "__main__":
 
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
     first_10_files = os.listdir(DIRECTORY_PREFIX)[: args.num_files]
-    for file_name in first_10_files:
-        if file_name.endswith(".jpg"):
-            # load the file into sdfs
-            with open(DIRECTORY_PREFIX + file_name, "rb") as f:
-                file_data = f.read()
-                file_message = make_file_message(
-                    file_data, file_name, MessageType.PUT, HOST, PORT
-                )
-                response = send_message(HOST, PORT, file_message)
+    # for file_name in first_10_files:
+    #     if file_name.endswith(".jpg"):
+    #         # load the file into sdfs
+    #         with open(DIRECTORY_PREFIX + file_name, "rb") as f:
+    #             file_data = f.read()
+    #             file_message = make_file_message(
+    #                 file_data, file_name, MessageType.PUT, HOST, PORT
+    #             )
+    #             response = send_message(HOST, PORT, file_message)
 
     # inference
     # let's do inference on the first file in the directory
-    file_name = first_10_files[0]
-    ml_message = make_ml_classification_message([file_name], HOST, PORT)
+    file_name = first_10_files[:8]
+    ml_message = make_ml_classification_message(file_name, HOST, PORT)
 
     # send the message
     response = send_message(HOST, PORT, ml_message)

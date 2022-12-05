@@ -15,7 +15,6 @@ from fastai.vision.all import *
 
 from ML.messages import get_file_get_msg, get_batch_complete_msg
 from ML.modeltypes import ModelType
-from ML.utils import load_learner
 
 
 if TYPE_CHECKING:
@@ -33,7 +32,7 @@ class MLModel:
         self.model = None
         # Hyperparameter to be set.
         # Utility comes from using this after coordinator failure
-        self.batch_size = 1
+        self.batch_size = 8
 
     """
     Remove this, the dataset should be filled in via SDFS.
@@ -62,6 +61,7 @@ class ClassifierModel(MLModel):
     def __init__(self, model_type: ModelType):
         super().__init__()
         self.model_type = model_type
+        self.model = self.train()
 
     def _load(self, model_pkl_path: str):
         # load the model from the pkl file into a fastai vision_learner
@@ -81,13 +81,16 @@ class ClassifierModel(MLModel):
             with open(model_pkl_path, "wb") as pkl_file:
                 pkl_file.write(model_pkl_file)
 
-        self.model = load_learner(model_pkl_path)
+        return load_learner(model_pkl_path)
 
     def train(self):
         if self.model_type == ModelType.RESNET:
-            self._load("ML/models/resnet.pkl")
+            return self._load("ML/models/resnet.pkl")
         else:
-            self._load("ML/models/alexnet.pkl")
+            return self._load("ML/models/alexnet.pkl")
+
+    def predict(self, img):
+        return self.model.predict(img)
 
 
 class DummyModel(MLModel):
@@ -109,68 +112,15 @@ class ModelCollection:
         self.server.logger.info("Loading models...")
         self.resnet.train()
         self.server.logger.info("ResNet loaded")
-        self.alexnet.train()
+        # self.alexnet.train()
         self.server.logger.info("ImageNet loaded")
 
         self.workDistThread = Thread()
         self.batch_lock = Lock()
         self.current_batch_id = None
         self.current_image_list = None
+        self.current_file_list = None
         self.current_model_type = None
-
-        """
-        self.probScaleThread = Thread()
-        # Dynamically adjusted based on query rates
-        # Assumption: Infinite work to do, so we will not need to account
-        # for the case where 1 queue is empty in the steady state.
-        # Therefore, we can just use local query rates of the 2 models to
-        # control this probability.
-        self.pick_resnet_prob = 0.5
-        """
-
-    """
-    # To be run by ProbScaleThread
-    def update_formula(self):
-        # Scaling factor k on probability will equalize the query rate
-        # assuming rate is directly proportional to probability of issue
-        # We will not immediate scale by this factor to prevent oscillations
-        # Assumption of steady state implies the model should generally not
-        # deal with cases of 0 query rate.
-        query_rate_resnet = self.resnet.get_query_rate()
-        query_rate_imagenet = self.alexnet.get_query_rate()
-        # Implicit assumption that query rate is much more significant
-        # than 0.001
-        query_rate_resnet += 0.001  # Prevent 0 division errors
-        query_rate_imagenet += 0.001  # Prevent 0 division errors
-        k_denom = (
-            1 - self.pick_resnet_prob
-        ) * query_rate_resnet + query_rate_imagenet * self.pick_resnet_prob
-        k_numerator = query_rate_resnet
-        k = k_numerator / k_denom
-        # Prevent oscillation, reduce weightage of scaling factor k
-        self.pick_resnet_prob *= 0.5 * k
-
-    # To be run by WorkDistThread
-    def work_dist(self):
-        # Assumption: High batch dispatch rate if there is empty queue.
-        # Pick a random float from 0 to 1.
-        rand_sample = random.uniform(0, 1)
-        # If float is smaller than self.pick_resnet_prob, choose resnet.
-        # Otherwise, choose lenet
-        if rand_sample < self.pick_resnet_prob:
-            chosen_model = self.resnet
-        else:
-            chosen_model = self.alexnet
-
-        chosen_model.infer_once()
-        if chosen_model.check_batch_successful():
-            # Create thread to write to SDFS
-            # Enqueue
-            # Even though infer once and enqueue images access the lock twice
-            # (non-atomic), enqueue images will check if the queue is filled
-            # up if there was a batch enqueue, so there will not be lost data.
-            chosen_model.enqueue_images()
-    """
 
     def select_model(self, model: ModelType):
         if model == ModelType.RESNET:
@@ -180,15 +130,17 @@ class ModelCollection:
 
     def infer(self):
         with self.batch_lock:
-            assert self.current_batch is not None
+            assert self.current_batch_id is not None
             self.model = self.select_model(self.current_model_type)
             pred = []
-            for img in self.current_batch:
+            for img in self.current_image_list:
                 pred.append(self.model.predict(img))
+                print(f"Predicted: {pred[-1]}")
             self.successful_batch(pred)
 
     def insert_batch(self, model_type, batch_id, file_list):
         image_list = []
+        print(f"FILE_LIST: {file_list}")
         for f in file_list:
             # Load from SDFS
             msg = get_file_get_msg(self.server, f)
@@ -197,19 +149,17 @@ class ModelCollection:
             # TODO: Account for failure
             received_data = self.server.broadcast_to(msg, [introducer_member], recv=True)
             # save the image to a temp file
-            with open("ML/temp.jpg", "wb") as temp_file:
-                temp_file.write(received_data[introducer_member].data)
 
             img_fastai = PILImage.create(received_data[introducer_member].data)
-            file_list.append(img_fastai)
+            image_list.append(img_fastai)
 
         with self.batch_lock:
             self.current_image_list = image_list
             self.current_batch_id = batch_id
             self.current_model_type = model_type
+            self.current_file_list = file_list
 
     def successful_batch(self, predictions):
-        raise NotImplementedError
 
         # TODO: Write this batch's results into SDFS
         # Write self.output_predictions to SDFS
@@ -218,10 +168,17 @@ class ModelCollection:
         # Also inform dispatcher the file name written into SDFS
         # using the same message
         # TODO: Change the Message to one with the filename
-        msg = get_batch_complete_msg(self.server)
+        results = [x[0] for x in predictions]  # we only want the class name
+        msg = get_batch_complete_msg(
+            self.server,
+            self.current_model_type,
+            self.current_batch_id,
+            self.current_file_list,
+            results,
+        )
         # TODO: Inform scheduler
         introducer_member = self.server.membership_list[0]
-        self.server.broadcast_to(msg, [introducer_member], recv=True)
+        self.server.broadcast_to(msg, [introducer_member])
 
 
 class DummyModelCollection:

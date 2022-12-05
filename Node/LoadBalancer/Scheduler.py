@@ -50,7 +50,7 @@ class Scheduler:
         """Run the scheduler"""
         while True:
             await asyncio.sleep(0.2)
-            print("Scheduler running")
+            # print("Scheduler running")
             batch = await self.pop_next_batch()
             if batch is None:
                 continue
@@ -61,5 +61,3 @@ class Scheduler:
             elif type(batch) is BatchResult:
                 # send response to client
                 print(f"GOT BATCH RESULT: {batch.results}")
-
-            print(type(batch))

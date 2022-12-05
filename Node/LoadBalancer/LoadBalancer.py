@@ -77,6 +77,8 @@ class LoadBalancer:
         """
         batch.schedule(node)
         # dispatch the job to the node
+        print(f"Dispatching batch {batch.id} to node {node}")
         broadcast_result = self.node.broadcast_to(batch.get_job_message(), [node])
         result = broadcast_result[node]
+        print(result)
         return BatchResult(batch, result)

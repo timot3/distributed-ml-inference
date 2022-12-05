@@ -333,7 +333,7 @@ class MLBatchResultMessage(MLMessage):
 
 def get_batch_complete_msg(server, model_type, batch_id, file_names, results):
     msg = MLBatchResultMessage(
-        server.ip,
+        server.host,
         server.port,
         server.timestamp,
         model_type,
@@ -344,7 +344,7 @@ def get_batch_complete_msg(server, model_type, batch_id, file_names, results):
     return msg
 
 
-def get_file_get_msg(server, file_name):
+def get_file_get_msg(server, file_name: str):
     msg = FileMessage(
         MessageType.GET,
         server.host,
