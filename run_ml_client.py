@@ -147,6 +147,7 @@ if __name__ == "__main__":
                     file_data, file_name, MessageType.PUT, HOST, PORT
                 )
                 try:
+                    print("Sending file", file_name)
                     response = send_message(HOST, PORT, file_message)
                 except ConnectionRefusedError:
                     response = send_message(BACKUP_HOST, BACKUP_PORT, file_message)

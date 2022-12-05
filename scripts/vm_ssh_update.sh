@@ -21,6 +21,7 @@ cd "$TOPDIR"
 #    echo "ece428_mp3 directory not found! Performing git clone!"
 #
 #fi
+rm -rf mp4
 git clone https://github.com/timot3/distributed-ml-inference mp4
 
 
