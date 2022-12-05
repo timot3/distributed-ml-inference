@@ -16,7 +16,6 @@ testfiles/*.test
 testfiles/*.en.tgz
 
 # ML models
-ML/models/*.pkl
 ML/config.json
 
 # ML data

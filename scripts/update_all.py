@@ -65,7 +65,7 @@ def main():
         return 1
 
     curdir = os.getcwd()
-    if not curdir.endswith("ece428_mp3/scripts"):
+    if not curdir.endswith("ece428_mp4/scripts"):
         print(
             f"curdir is: {curdir} . It is not in a directory with path ending with 'ece428_mp3/scripts'!"
         )
