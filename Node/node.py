@@ -56,6 +56,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         host,
         port,
         is_introducer=False,
+        is_backup=False,
         slow_mode=False,
     ):
         # call the super class constructor
@@ -65,6 +66,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.port = port
 
         self.is_introducer = is_introducer
+        self.is_backup = is_backup
         self.slow_mode = slow_mode
 
         # initialized when the node joins the ring
@@ -75,7 +77,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         self.leader_port = self.port
 
         self.client_ip = "localhost"
-        self.client_port = 8081
+        self.client_port = 8082
 
         # initialized when the node joins the ring
         self.timestamp: int = 0
@@ -98,7 +100,7 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
         # self.election_info = NodeElectInfo()
 
         # init the load balancer, if necessart
-        if self.is_introducer:
+        if self.is_introducer or self.is_backup:
             self.scheduler = Scheduler(self)
             self.load_balancer = LoadBalancer(self)
 
@@ -560,9 +562,16 @@ class NodeTCPServer(socketserver.ThreadingTCPServer):
             print(in_red("REREPLICATING FILES"))
             self._rereplicate_files(leaving_member)
 
+        introducer_is_leaving = False
+
         if leaving_member in self.membership_list:
+            if leaving_member == self.membership_list[0]:
+                introducer_is_leaving = True
             self.membership_list.remove(leaving_member)
         self.broadcast_to_neighbors(message)
+
+        if introducer_is_leaving and self.is_backup:
+            self.is_introducer = True
 
     def get_self_id(self) -> int:
         """

@@ -90,18 +90,16 @@ def command_C5():
 
 def run_ml_client_server():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.bind(("localhost", 8081))
+        s.bind(("localhost", 8082))
         s.listen()
         print("Listening on port", s.getsockname()[1])
         while True:
             conn, addr = s.accept()
             with conn:
-                print("Connected by", addr)
                 while True:
                     data = _recvall(conn)
                     if not data:
                         break
-                    print("Received", data)
                     # parse the data
                     message = MLBatchResultMessage.deserialize(data)
                     print(f"Prediction: {message.results}")
@@ -115,7 +113,7 @@ if __name__ == "__main__":
         "--num-files", type=int, default=10, help="Number of files to test"
     )
     parser.add_argument(
-        "--num-batches", type=int, default=3, help="Number of batches to test"
+        "--num-batches", type=int, default=100, help="Number of batches to test"
     )
     parser.add_argument(
         "--batch-size", type=int, default=4, help="Number of files per batch"
@@ -125,9 +123,11 @@ if __name__ == "__main__":
     # if args.local:
     if True:
         HOST, PORT = "127.0.0.1", 8080
+        BACKUP_HOST, BACKUP_PORT = "127.0.0.1", 8081
     else:
         leader_ip = socket.gethostbyname(VM1_URL)
         HOST, PORT = leader_ip, 8080
+        BACKUP_HOST, BACKUP_PORT = leader_ip, 8081
 
     DIRECTORY_PREFIX = "ML/datasets/oxford_pets/"
 
@@ -146,16 +146,22 @@ if __name__ == "__main__":
                 file_message = make_file_message(
                     file_data, file_name, MessageType.PUT, HOST, PORT
                 )
-                response = send_message(HOST, PORT, file_message)
-
+                try:
+                    response = send_message(HOST, PORT, file_message)
+                except ConnectionRefusedError:
+                    response = send_message(BACKUP_HOST, BACKUP_PORT, file_message)
     # inference
+
     # let's do inference on the first file in the directory1
 
     for i in range(args.num_batches):
         file_names = random.sample(first_10_files, args.batch_size)
         print(file_names)
         ml_message = make_ml_classification_message(file_names, HOST, PORT)
-        response = send_message(HOST, PORT, ml_message, recv=False)
+        try:
+            response = send_message(HOST, PORT, ml_message, recv=False)
+        except ConnectionRefusedError:
+            response = send_message(BACKUP_HOST, BACKUP_PORT, ml_message, recv=False)
 
     # wait for the server to finish
     client_server.join()

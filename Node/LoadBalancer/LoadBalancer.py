@@ -98,22 +98,27 @@ class LoadBalancer:
         :param batch: The job to dispatch
         :return: The result of the batch
         """
+
         batch.schedule(node)
 
         self.active_batches[batch.id] = batch
 
         # dispatch the job to the node
-        print(f"Dispatching batch {batch.id} to node {node}")
-        broadcast_result = self.node.broadcast_to(
-            batch.get_job_message(), [node], recv=False
-        )
-        result = broadcast_result[node]
-        if not result:
-            print(f"Batch {batch.id} failed on node {node}")
-            return None
 
-        # return the result
-        return BatchResult(batch, result)
+        if self.node.is_introducer:
+            print(f"Dispatching batch {batch.id} to node {node}")
+            broadcast_result = self.node.broadcast_to(
+                batch.get_job_message(), [node], recv=False
+            )
+            result = broadcast_result[node]
+            if not result:
+                print(f"Batch {batch.id} failed on node {node}")
+                return None
+
+            # return the result
+            return BatchResult(batch, result)
+        elif self.node.is_backup:
+            return BatchResult(batch, None)
 
     def complete_batch(self, batch_id: int, result: list):
         """Complete a batch"""
