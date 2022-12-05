@@ -86,7 +86,6 @@ class FileStore:
 
         # increment the version number by 1
         file_version = self.get_file_version(file_name) + 1
-        print(file_version)
         self.file_map[file_name].append(
             File(file_name, file_content, version=file_version)
         )

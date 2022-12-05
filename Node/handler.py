@@ -201,8 +201,8 @@ class NodeHandler(socketserver.BaseRequestHandler):
         self.request.sendall(add_len_prefix(client_ack_message.serialize()))
 
         # DEBUGGING PURPOSES: Print the membership list --> files that each node has
-        for member in self.server.membership_list:
-            self.server.logger.info(f"{member} has {member.files}")
+        # for member in self.server.membership_list:
+        #     self.server.logger.info(f"{member} has {member.files}")
 
     def _process_delete(self, message: FileMessage) -> None:
         """
@@ -309,7 +309,7 @@ class NodeHandler(socketserver.BaseRequestHandler):
                         my_file.version,
                         my_file.file_content,
                     )
-                    print(f"Replying with {file_message}")
+                    # print(f"Replying with {file_message}")
                     self.request.sendall(add_len_prefix(file_message.serialize()))
             return
 

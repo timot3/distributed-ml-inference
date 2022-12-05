@@ -38,16 +38,16 @@ if __name__ == "__main__":
     DIRECTORY_PREFIX = "ML/datasets/oxford_pets/"
 
     # load the first 10 files from ML/datasets/oxford_pets into sdfs
-    first_10_files = os.listdir(DIRECTORY_PREFIX)[: args.num_files]
-    for file_name in first_10_files:
-        if file_name.endswith(".jpg"):
-            # load the file into sdfs
-            with open(DIRECTORY_PREFIX + file_name, "rb") as f:
-                file_data = f.read()
-                file_message = make_file_message(
-                    file_data, file_name, MessageType.PUT, HOST, PORT
-                )
-                response = send_message(HOST, PORT, file_message)
+    first_10_files = os.listdir(DIRECTORY_PREFIX)
+    # for file_name in first_10_files:
+    #     if file_name.endswith(".jpg"):
+    #         # load the file into sdfs
+    #         with open(DIRECTORY_PREFIX + file_name, "rb") as f:
+    #             file_data = f.read()
+    #             file_message = make_file_message(
+    #                 file_data, file_name, MessageType.PUT, HOST, PORT
+    #             )
+    #             response = send_message(HOST, PORT, file_message)
 
     # inference
     # let's do inference on the first file in the directory

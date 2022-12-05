@@ -158,6 +158,7 @@ class ModelCollection:
         with self.batch_lock:
             self.current_batch = Batch(model_type, file_list)
             self.current_image_list = image_list
+            self.infer()
 
     def successful_batch(self, predictions):
 
